@@ -1,0 +1,1424 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="description" content="Forte Gado - Sistema de Vendas em Campo e Controle de Estoque Físico." />
+  <title>Forte Gado - Vendas &amp; Estoque (Protótipo)</title>
+  
+  <!-- Estilos CSS Vanilla -->
+  <link rel="stylesheet" href="./src/index.css">
+  
+  <!-- Dependências via CDN (Para execução imediata sem npm install) -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <!-- Lucide Icons via CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- Código React compilado em tempo de execução pelo Babel -->
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // --- MOCK DE LUCIDE ICONS PARA USO SEM BUNDLER ---
+    // Cria componentes React a partir dos ícones do Lucide
+    function LucideIcon({ name, size = 20, color = 'currentColor', className = '' }) {
+      useEffect(() => {
+        if (window.lucide) {
+          window.lucide.createIcons();
+        }
+      }, [name]);
+      return <i data-lucide={name} style={{ width: size, height: size, color: color, display: 'inline-block' }} className={className}></i>;
+    }
+
+    const ShoppingBag = (props) => <LucideIcon name="shopping-bag" {...props} />;
+    const Truck = (props) => <LucideIcon name="truck" {...props} />;
+    const Package = (props) => <LucideIcon name="package" {...props} />;
+    const DollarSign = (props) => <LucideIcon name="dollar-sign" {...props} />;
+    const SettingsIcon = (props) => <LucideIcon name="settings" {...props} />;
+    const Home = (props) => <LucideIcon name="home" {...props} />;
+    const Wifi = (props) => <LucideIcon name="wifi" {...props} />;
+    const WifiOff = (props) => <LucideIcon name="wifi-off" {...props} />;
+    const RefreshCw = (props) => <LucideIcon name="refresh-cw" {...props} />;
+    const AlertCircle = (props) => <LucideIcon name="alert-circle" {...props} />;
+    const CheckCircle = (props) => <LucideIcon name="check-circle" {...props} />;
+    const Search = (props) => <LucideIcon name="search" {...props} />;
+    const Plus = (props) => <LucideIcon name="plus" {...props} />;
+    const Minus = (props) => <LucideIcon name="minus" {...props} />;
+    const Trash2 = (props) => <LucideIcon name="trash-2" {...props} />;
+    const MapPin = (props) => <LucideIcon name="map-pin" {...props} />;
+    const Send = (props) => <LucideIcon name="send" {...props} />;
+    const FileText = (props) => <LucideIcon name="file-text" {...props} />;
+    const Camera = (props) => <LucideIcon name="camera" {...props} />;
+    const Upload = (props) => <LucideIcon name="upload" {...props} />;
+    const TrendingUp = (props) => <LucideIcon name="trending-up" {...props} />;
+    const AlertTriangle = (props) => <LucideIcon name="alert-triangle" {...props} />;
+    const Sliders = (props) => <LucideIcon name="sliders" {...props} />;
+    const Save = (props) => <LucideIcon name="save" {...props} />;
+    const Refresh = (props) => <LucideIcon name="refresh-cw" {...props} />;
+
+    // ==========================================
+    // SERVIÇO DE BANCO DE DADOS LOCAL (localStorage)
+    // ==========================================
+    const LOCAL_STORAGE_KEY = 'fortegado_db';
+    const SYNC_QUEUE_KEY = 'fortegado_sync_queue';
+    const CREDENTIALS_KEY = 'fortegado_credentials';
+
+    const INITIAL_DATA = {
+      empresas: [
+        { id: 1, nome: 'Forte Gado Comercial Ltda', cnpj: '12.345.678/0001-90', endereco: 'Rodovia Transagro, Km 45, Uberaba - MG', telefone: '(34) 99999-1111', logotipo: '🐂' }
+      ],
+      usuarios: [
+        { id: 1, nome: 'Wislley Prado', email: 'prado@fortegado.com.br', perfil: 'Administrador', ativo: true },
+        { id: 2, nome: 'Silva Vendedor', email: 'silva@fortegado.com.br', perfil: 'Vendedor', ativo: true }
+      ],
+      clientes: [
+        { id: 1, nome: 'Fazenda Bela Vista (Carlos)', cpf_cnpj: '11.222.333/0001-44', telefone: '(34) 98888-2222', endereco: 'Estrada Geral, Zona Rural', cidade: 'Uberaba' },
+        { id: 2, nome: 'Agropecuária São José', cpf_cnpj: '22.333.444/0001-55', telefone: '(34) 98777-3333', endereco: 'Av. Brasil, 120, Centro', cidade: 'Sacramento' },
+        { id: 3, nome: 'Haras Imperial (Dra. Ana)', cpf_cnpj: '33.444.555/0001-66', telefone: '(16) 99666-4444', endereco: 'Rodovia SP-330, Km 310', cidade: 'Ribeirão Preto' },
+        { id: 4, nome: 'Fazenda Santa Maria (José)', cpf_cnpj: '44.555.666/0001-77', telefone: '(34) 99555-5555', endereco: 'Vicinal dos Ipês, Km 8', cidade: 'Conquista' },
+        { id: 5, nome: 'Recanto Feliz Agro', cpf_cnpj: '55.666.777/0001-88', telefone: '(34) 99111-6666', endereco: 'Fazenda Recanto Feliz', cidade: 'Delta' }
+      ],
+      produtos: [
+        { id: 1, codigo: 'RAC001', nome: 'Ração Gado de Corte Premium', unidade: 'Saco 40kg', preco: 120.00 },
+        { id: 2, codigo: 'SUP002', nome: 'Suplemento Mineral Fosgasto', unidade: 'Saco 25kg', preco: 185.50 },
+        { id: 3, codigo: 'SAL003', nome: 'Sal Milagroso Engorda Rápida', unidade: 'Saco 25kg', preco: 95.00 },
+        { id: 4, codigo: 'VAC004', nome: 'Vacina Antiaftosa ForteDose', unidade: 'Frasco 50ml', preco: 350.00 },
+        { id: 5, codigo: 'VER005', nome: 'Vermífugo Premium Potente', unidade: 'Frasco 500ml', preco: 280.00 }
+      ],
+      estoque: [
+        { id: 1, produto_id: 1, quantidade_atual: 150, quantidade_reservada: 20, estoque_minimo: 30 },
+        { id: 2, produto_id: 2, quantidade_atual: 45, quantidade_reservada: 5, estoque_minimo: 10 },
+        { id: 3, produto_id: 3, quantidade_atual: 300, quantidade_reservada: 0, estoque_minimo: 50 },
+        { id: 4, produto_id: 4, quantidade_atual: 12, quantidade_reservada: 2, estoque_minimo: 15 },
+        { id: 5, produto_id: 5, quantidade_atual: 0, quantidade_reservada: 0, estoque_minimo: 5 }
+      ],
+      pedidos: [
+        { id: 1001, numero: 'FG-1001', cliente_id: 1, vendedor_id: 2, data: '2026-06-12T10:00:00Z', status: 'Entregue', total: 610.00 },
+        { id: 1002, numero: 'FG-1002', cliente_id: 2, vendedor_id: 2, data: '2026-06-13T09:15:00Z', status: 'Emitido', total: 2420.00 },
+        { id: 1003, numero: 'FG-1003', cliente_id: 3, vendedor_id: 1, data: '2026-06-13T11:30:00Z', status: 'Emitido', total: 1100.00 }
+      ],
+      itens_pedido: [
+        { id: 1, pedido_id: 1001, produto_id: 1, quantidade: 2, valor_unitario: 120.00, desconto: 10.00 },
+        { id: 2, pedido_id: 1001, produto_id: 2, quantidade: 2, valor_unitario: 185.00, desconto: 0.00 },
+        { id: 3, pedido_id: 1002, produto_id: 4, quantidade: 2, valor_unitario: 350.00, desconto: 0.00 },
+        { id: 4, pedido_id: 1002, produto_id: 1, quantidade: 10, valor_unitario: 120.00, desconto: 0.00 },
+        { id: 5, pedido_id: 1002, produto_id: 3, quantidade: 5, valor_unitario: 95.00, desconto: 25.00 },
+        { id: 6, pedido_id: 1003, produto_id: 2, quantidade: 5, valor_unitario: 185.50, desconto: 0.00 },
+        { id: 7, pedido_id: 1003, produto_id: 3, quantidade: 2, valor_unitario: 95.00, desconto: 10.00 }
+      ],
+      parcelas: [
+        { id: 1, pedido_id: 1001, vencimento: '2026-07-12', valor: 305.00, pago: true },
+        { id: 2, pedido_id: 1001, vencimento: '2026-08-12', valor: 305.00, pago: true },
+        { id: 3, pedido_id: 1002, vencimento: '2026-06-13', valor: 1210.00, pago: false },
+        { id: 4, pedido_id: 1002, vencimento: '2026-07-13', valor: 1210.00, pago: false },
+        { id: 5, pedido_id: 1003, vencimento: '2026-07-13', valor: 1100.00, pago: false }
+      ],
+      assinaturas: [
+        { id: 1, pedido_id: 1001, imagem: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="30"><path d="M 10,15 Q 30,5 50,20 T 90,15" fill="none" stroke="black" stroke-width="2"/></svg>' }
+      ],
+      fotos_entrega: [
+        { id: 1, pedido_id: 1001, imagem: '🐂' }
+      ],
+      localizacoes: [
+        { id: 1, pedido_id: 1001, tipo: 'venda', latitude: -19.7476, longitude: -47.9392, data_hora: '2026-06-12T10:00:00Z' },
+        { id: 2, pedido_id: 1001, tipo: 'entrega', latitude: -19.7480, longitude: -47.9388, data_hora: '2026-06-12T14:30:00Z' },
+        { id: 3, pedido_id: 1002, tipo: 'venda', latitude: -19.7345, longitude: -47.9022, data_hora: '2026-06-13T09:15:00Z' },
+        { id: 4, pedido_id: 1003, tipo: 'venda', latitude: -21.1704, longitude: -47.8103, data_hora: '2026-06-13T11:30:00Z' }
+      ]
+    };
+
+    function getDb() {
+      const data = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (!data) {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(INITIAL_DATA));
+        return INITIAL_DATA;
+      }
+      return JSON.parse(data);
+    }
+
+    function saveDb(data) {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+      window.dispatchEvent(new Event('fortegado_db_update'));
+    }
+
+    function resetDb() {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(INITIAL_DATA));
+      window.dispatchEvent(new Event('fortegado_db_update'));
+    }
+
+    function getCredentials() {
+      const data = localStorage.getItem(CREDENTIALS_KEY);
+      return data ? JSON.parse(data) : { supabaseUrl: '', supabaseAnonKey: '', googleSheetsUrl: '', activeUserId: 2, simulateOffline: false };
+    }
+
+    function saveCredentials(creds) {
+      localStorage.setItem(CREDENTIALS_KEY, JSON.stringify(creds));
+      window.dispatchEvent(new Event('fortegado_credentials_update'));
+    }
+
+    function getSyncQueue() {
+      const queue = localStorage.getItem(SYNC_QUEUE_KEY);
+      return queue ? JSON.parse(queue) : [];
+    }
+
+    function saveSyncQueue(queue) {
+      localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue));
+      window.dispatchEvent(new Event('fortegado_queue_update'));
+    }
+
+    function addToSyncQueue(actionType, payload) {
+      const queue = getSyncQueue();
+      queue.push({
+        id: Date.now().toString(36) + Math.random().toString(36).substring(2, 5),
+        actionType,
+        payload,
+        createdAt: new Date().toISOString()
+      });
+      saveSyncQueue(queue);
+    }
+
+    // ==========================================
+    // SERVIÇOS DE SINCRONIZAÇÃO (Supabase & Sheets)
+    // ==========================================
+    async function syncToGoogleSheets(actionType, payload) {
+      const creds = getCredentials();
+      if (!creds.googleSheetsUrl) return { success: false, reason: 'Sheets não configurado' };
+      if (creds.simulateOffline) return { success: false, reason: 'Modo Offline Ativado' };
+
+      const db = getDb();
+      let sheetsPayload = {};
+
+      try {
+        if (actionType === 'CREATE_ORDER') {
+          const client = db.clientes.find(c => c.id === payload.pedido.cliente_id) || {};
+          const seller = db.usuarios.find(u => u.id === payload.pedido.vendedor_id) || {};
+          sheetsPayload = {
+            action: 'CREATE_ORDER',
+            payload: {
+              pedido: payload.pedido,
+              clienteNome: client.nome || 'Desconhecido',
+              clienteCidade: client.cidade || 'Não informada',
+              vendedorNome: seller.nome || 'Vendedor',
+              parcelas: payload.parcelas
+            }
+          };
+        } else if (actionType === 'CONFIRM_DELIVERY') {
+          const ped = db.pedidos.find(p => p.id === payload.pedidoId) || {};
+          const items = db.itens_pedido.filter(i => i.pedido_id === payload.pedidoId);
+          const resolvedItems = items.map(it => {
+            const prod = db.produtos.find(p => p.id === it.produto_id) || {};
+            return { ...it, produtoNome: prod.nome || 'Produto' };
+          });
+          sheetsPayload = {
+            action: 'CONFIRM_DELIVERY',
+            payload: { pedidoNumero: ped.numero, itens: resolvedItems }
+          };
+        } else if (actionType === 'CANCEL_ORDER') {
+          const ped = db.pedidos.find(p => p.id === payload.pedidoId) || {};
+          sheetsPayload = { action: 'CANCEL_ORDER', payload: { pedidoNumero: ped.numero } };
+        } else if (actionType === 'REOPEN_ORDER') {
+          const ped = db.pedidos.find(p => p.id === payload.pedidoId) || {};
+          sheetsPayload = { action: 'REOPEN_ORDER', payload: { pedidoNumero: ped.numero } };
+        } else if (actionType === 'RECEIVE_INSTALLMENT') {
+          const par = db.parcelas.find(p => p.id === payload.parcelaId) || {};
+          const ped = db.pedidos.find(p => p.id === par.pedido_id) || {};
+          const client = db.clientes.find(c => c.id === ped.cliente_id) || {};
+          const allPars = db.parcelas.filter(p => p.pedido_id === ped.id);
+          const index = allPars.findIndex(p => p.id === par.id) + 1;
+          sheetsPayload = {
+            action: 'RECEIVE_INSTALLMENT',
+            payload: { clienteNome: client.nome, parcelaIndex: index + '/' + allPars.length, pedidoNumero: ped.numero }
+          };
+        }
+
+        const response = await fetch(creds.googleSheetsUrl, {
+          method: 'POST',
+          mode: 'cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify(sheetsPayload)
+        });
+        return await response.json();
+      } catch (err) {
+        console.error(err);
+        return { success: false, error: err.message };
+      }
+    }
+
+    async function syncQueueToSupabase() {
+      const creds = getCredentials();
+      if (!creds.supabaseUrl || !creds.supabaseAnonKey) return { success: false, reason: 'Supabase não configurado' };
+      if (creds.simulateOffline) return { success: false, reason: 'Modo Offline Ativado' };
+
+      const queue = getSyncQueue();
+      if (queue.length === 0) return { success: true, processed: 0 };
+
+      // Carregar Supabase client dinamicamente da CDN
+      const supabase = window.supabase.createClient(creds.supabaseUrl, creds.supabaseAnonKey);
+      let processedCount = 0;
+      const newQueue = [...queue];
+
+      for (const item of queue) {
+        try {
+          const { actionType, payload } = item;
+          let success = false;
+
+          if (actionType === 'CREATE_ORDER') {
+            const { error: errPed } = await supabase.from('pedidos').insert(payload.pedido);
+            const { error: errItens } = await supabase.from('itens_pedido').insert(payload.itens);
+            const { error: errPar } = await supabase.from('parcelas').insert(payload.parcelas);
+            const { error: errAss } = await supabase.from('assinaturas').insert(payload.assinatura);
+            const { error: errLoc } = await supabase.from('localizacoes').insert(payload.localizacao);
+            success = !errPed && !errItens && !errPar && !errAss && !errLoc;
+          } else if (actionType === 'CONFIRM_DELIVERY') {
+            const { error: errPed } = await supabase.from('pedidos').update({ status: 'Entregue' }).eq('id', payload.pedidoId);
+            const { error: errFoto } = await supabase.from('fotos_entrega').insert(payload.foto);
+            const { error: errLoc } = await supabase.from('localizacoes').insert(payload.localizacao);
+            success = !errPed && !errFoto && !errLoc;
+          } else if (actionType === 'CANCEL_ORDER') {
+            const { error: errPed } = await supabase.from('pedidos').update({ status: 'Cancelado' }).eq('id', payload.pedidoId);
+            success = !errPed;
+          } else if (actionType === 'REOPEN_ORDER') {
+            const { error: errPed } = await supabase.from('pedidos').update({ status: 'Emitido' }).eq('id', payload.pedidoId);
+            success = !errPed;
+          } else if (actionType === 'RECEIVE_INSTALLMENT') {
+            const { error: errPar } = await supabase.from('parcelas').update({ pago: true }).eq('id', payload.parcelaId);
+            success = !errPar;
+          } else if (actionType === 'CREATE_CLIENT') {
+            const { error: errCli } = await supabase.from('clientes').insert(payload);
+            success = !errCli;
+          }
+
+          if (success) {
+            newQueue.shift();
+            processedCount++;
+          } else {
+            break;
+          }
+        } catch (e) {
+          console.error(e);
+          break;
+        }
+      }
+
+      saveSyncQueue(newQueue);
+      return { success: true, processed: processedCount };
+    }
+
+    // ==========================================
+    // OUTRAS AÇÕES DE CRIAÇÃO LOCAL
+    // ==========================================
+    function createOrderLocal(orderData) {
+      const db = getDb();
+      const nextId = db.pedidos.length > 0 ? Math.max(...db.pedidos.map(p => p.id)) + 1 : 1001;
+      const nextNum = `FG-${nextId}`;
+      
+      const newOrder = {
+        id: nextId,
+        numero: nextNum,
+        cliente_id: Number(orderData.cliente_id),
+        vendedor_id: Number(orderData.vendedor_id),
+        data: new Date().toISOString(),
+        status: 'Emitido',
+        total: orderData.total
+      };
+      
+      const items = orderData.itens.map((it, idx) => ({
+        id: db.itens_pedido.length > 0 ? Math.max(...db.itens_pedido.map(i => i.id)) + 1 + idx : 1 + idx,
+        pedido_id: nextId,
+        produto_id: Number(it.produto_id),
+        quantidade: Number(it.quantidade),
+        valor_unitario: Number(it.valor_unitario),
+        desconto: Number(it.desconto || 0)
+      }));
+
+      const parcelas = orderData.parcelas.map((par, idx) => ({
+        id: db.parcelas.length > 0 ? Math.max(...db.parcelas.map(p => p.id)) + 1 + idx : 1 + idx,
+        pedido_id: nextId,
+        vencimento: par.vencimento,
+        valor: Number(par.valor),
+        pago: false
+      }));
+
+      const assinatura = {
+        id: db.assinaturas.length > 0 ? Math.max(...db.assinaturas.map(a => a.id)) + 1 : 1,
+        pedido_id: nextId,
+        imagem: orderData.assinatura
+      };
+
+      const localizacao = {
+        id: db.localizacoes.length > 0 ? Math.max(...db.localizacoes.map(l => l.id)) + 1 : 1,
+        pedido_id: nextId,
+        tipo: 'venda',
+        latitude: orderData.latitude,
+        longitude: orderData.longitude,
+        data_hora: new Date().toISOString()
+      };
+
+      // Reservar Estoque
+      orderData.itens.forEach(it => {
+        const est = db.estoque.find(e => e.produto_id === Number(it.produto_id));
+        if (est) est.quantidade_reservada += Number(it.quantidade);
+      });
+
+      db.pedidos.push(newOrder);
+      db.itens_pedido.push(...items);
+      db.parcelas.push(...parcelas);
+      db.assinaturas.push(assinatura);
+      db.localizacoes.push(localizacao);
+      saveDb(db);
+
+      addToSyncQueue('CREATE_ORDER', {
+        pedido: newOrder,
+        itens: items,
+        parcelas,
+        assinatura,
+        localizacao
+      });
+
+      return newOrder;
+    }
+
+    function confirmDeliveryLocal(pedidoId, deliveryData) {
+      const db = getDb();
+      const ped = db.pedidos.find(p => p.id === Number(pedidoId));
+      if (!ped) return null;
+
+      ped.status = 'Entregue';
+
+      const foto = {
+        id: db.fotos_entrega.length > 0 ? Math.max(...db.fotos_entrega.map(f => f.id)) + 1 : 1,
+        pedido_id: Number(pedidoId),
+        imagem: deliveryData.imagem
+      };
+      db.fotos_entrega.push(foto);
+
+      const localizacao = {
+        id: db.localizacoes.length > 0 ? Math.max(...db.localizacoes.map(l => l.id)) + 1 : 1,
+        pedido_id: Number(pedidoId),
+        tipo: 'entrega',
+        latitude: deliveryData.latitude,
+        longitude: deliveryData.longitude,
+        data_hora: new Date().toISOString()
+      };
+      db.localizacoes.push(localizacao);
+
+      const itens = db.itens_pedido.filter(i => i.pedido_id === Number(pedidoId));
+      itens.forEach(it => {
+        const est = db.estoque.find(e => e.produto_id === Number(it.produto_id));
+        if (est) {
+          est.quantidade_reservada = Math.max(0, est.quantidade_reservada - it.quantidade);
+          est.quantidade_atual = Math.max(0, est.quantidade_atual - it.quantidade);
+        }
+      });
+
+      saveDb(db);
+
+      addToSyncQueue('CONFIRM_DELIVERY', {
+        pedidoId: Number(pedidoId),
+        foto,
+        localizacao
+      });
+
+      return ped;
+    }
+
+    function cancelOrderLocal(pedidoId) {
+      const db = getDb();
+      const ped = db.pedidos.find(p => p.id === Number(pedidoId));
+      if (!ped) return null;
+
+      const oldStatus = ped.status;
+      ped.status = 'Cancelado';
+
+      if (oldStatus === 'Emitido') {
+        const itens = db.itens_pedido.filter(i => i.pedido_id === Number(pedidoId));
+        itens.forEach(it => {
+          const est = db.estoque.find(e => e.produto_id === Number(it.produto_id));
+          if (est) est.quantidade_reservada = Math.max(0, est.quantidade_reservada - it.quantidade);
+        });
+      }
+
+      saveDb(db);
+      addToSyncQueue('CANCEL_ORDER', { pedidoId: Number(pedidoId), oldStatus });
+      return ped;
+    }
+
+    function receiveInstallmentLocal(parcelaId) {
+      const db = getDb();
+      const par = db.parcelas.find(p => p.id === Number(parcelaId));
+      if (!par) return null;
+
+      par.pago = true;
+      saveDb(db);
+      addToSyncQueue('RECEIVE_INSTALLMENT', { parcelaId: Number(parcelaId) });
+      return par;
+    }
+
+    function adjustStockLocal(produtoId, novaQty, novaMin) {
+      const db = getDb();
+      const est = db.estoque.find(e => e.produto_id === Number(produtoId));
+      if (!est) return null;
+
+      est.quantidade_atual = Number(novaQty);
+      est.estoque_minimo = Number(novaMin);
+      saveDb(db);
+      addToSyncQueue('ADJUST_STOCK', { produtoId: Number(produtoId), quantidade_atual: est.quantidade_atual, estoque_minimo: est.estoque_minimo });
+      return est;
+    }
+
+    function createClientLocal(clientData) {
+      const db = getDb();
+      const nextId = db.clientes.length > 0 ? Math.max(...db.clientes.map(c => c.id)) + 1 : 1;
+      const newClient = {
+        id: nextId,
+        nome: clientData.nome,
+        cpf_cnpj: clientData.cpf_cnpj || '',
+        telefone: clientData.telefone || '',
+        endereco: clientData.endereco || '',
+        cidade: clientData.cidade || ''
+      };
+      db.clientes.push(newClient);
+      saveDb(db);
+      addToSyncQueue('CREATE_CLIENT', newClient);
+      return newClient;
+    }
+
+    // ==========================================
+    // IMPRESSÃO DE PDF DO PEDIDO (window.print)
+    // ==========================================
+    function printOrderPDF(pedidoId) {
+      const db = getDb();
+      const ped = db.pedidos.find(p => p.id === Number(pedidoId));
+      if (!ped) return;
+      
+      const client = db.clientes.find(c => c.id === ped.cliente_id) || {};
+      const seller = db.usuarios.find(u => u.id === ped.vendedor_id) || {};
+      const items = db.itens_pedido.filter(i => i.pedido_id === ped.id);
+      const parcelas = db.parcelas.filter(p => p.pedido_id === ped.id);
+      const signature = db.assinaturas.find(a => a.pedido_id === ped.id);
+      const location = db.localizacoes.find(l => l.pedido_id === ped.id && l.tipo === 'venda');
+      
+      const resolvedItems = items.map(it => {
+        const prod = db.produtos.find(p => p.id === it.produto_id) || {};
+        return { ...it, nome: prod.nome, codigo: prod.codigo, unidade: prod.unidade };
+      });
+
+      const printContent = `
+        <html>
+        <head>
+          <title>Pedido ${ped.numero} - Forte Gado</title>
+          <style>
+            body { font-family: sans-serif; color: #1A1A1A; margin: 20px; }
+            .header { border-bottom: 3px solid #0A2E73; padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; }
+            .logo { font-size: 24px; font-weight: bold; color: #0A2E73; }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+            .card { background: #F8FAFC; border: 1px solid #E2E8F0; padding: 12px; border-radius: 6px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+            th, td { padding: 8px; border-bottom: 1px solid #E2E8F0; text-align: left; }
+            th { background: #0A2E73; color: white; }
+            .total { text-align: right; font-size: 18px; font-weight: bold; color: #0A2E73; margin-top: 15px; }
+            .signature { text-align: center; border: 1px solid #E2E8F0; padding: 15px; background: #FFF; width: 250px; margin-top: 20px; }
+            .signature img { max-height: 60px; max-width: 90%; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="logo">🐂 Forte Gado Comercial</div>
+            <div><h2>PEDIDO DE COMPRA: ${ped.numero}</h2></div>
+          </div>
+          <div class="grid">
+            <div class="card">
+              <h3>Cliente</h3>
+              <p><strong>Nome:</strong> ${client.nome}</p>
+              <p><strong>Cidade:</strong> ${client.cidade}</p>
+            </div>
+            <div class="card">
+              <h3>Emissão</h3>
+              <p><strong>Data:</strong> ${new Date(ped.data).toLocaleDateString('pt-BR')}</p>
+              <p><strong>Vendedor:</strong> ${seller.nome}</p>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr><th>Produto</th><th>Qtd</th><th>Unitário</th><th>Desc</th><th>Total</th></tr>
+            </thead>
+            <tbody>
+              ${resolvedItems.map(it => `
+                <tr>
+                  <td>${it.nome}</td>
+                  <td>${it.quantidade}</td>
+                  <td>R$ ${it.valor_unitario.toFixed(2)}</td>
+                  <td>R$ ${it.desconto.toFixed(2)}</td>
+                  <td>R$ ${((it.quantidade * it.valor_unitario) - it.desconto).toFixed(2)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <div class="total">VALOR TOTAL: R$ ${ped.total.toFixed(2)}</div>
+          <div class="signature">
+            ${signature ? `<img src="${signature.imagem}" />` : ''}
+            <div style="border-top: 1px solid #A0AEC0; margin-top: 10px; font-size: 11px;">Assinatura do Cliente</div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      const win = window.open('', '_blank', 'width=800,height=600');
+      win.document.write(printContent);
+      win.document.close();
+      win.onload = () => {
+        win.focus();
+        win.print();
+      };
+    }
+
+    // ==========================================
+    // COMPONENTES COMPILADOS DO REACT
+    // ==========================================
+    
+    // 1. CanvasSignature
+    function CanvasSignature({ onSave, onClearSignature }) {
+      const canvasRef = useRef(null);
+      const [isDrawing, setIsDrawing] = useState(false);
+      const [isEmpty, setIsEmpty] = useState(true);
+
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        canvas.width = canvas.parentNode.getBoundingClientRect().width;
+        canvas.height = 180;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = '#1A1A1A';
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+      }, []);
+
+      const getCoords = (e) => {
+        const canvas = canvasRef.current;
+        const rect = canvas.getBoundingClientRect();
+        if (e.touches && e.touches.length > 0) {
+          return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
+        }
+        return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      };
+
+      const start = (e) => {
+        e.preventDefault();
+        const coords = getCoords(e);
+        const ctx = canvasRef.current.getContext('2d');
+        ctx.beginPath();
+        ctx.moveTo(coords.x, coords.y);
+        setIsDrawing(true);
+        setIsEmpty(false);
+      };
+
+      const draw = (e) => {
+        if (!isDrawing) return;
+        e.preventDefault();
+        const coords = getCoords(e);
+        const ctx = canvasRef.current.getContext('2d');
+        ctx.lineTo(coords.x, coords.y);
+        ctx.stroke();
+      };
+
+      const stop = () => {
+        if (!isDrawing) return;
+        setIsDrawing(false);
+        const dataUrl = canvasRef.current.toDataURL('image/png');
+        onSave(dataUrl);
+      };
+
+      const clear = () => {
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        setIsEmpty(true);
+        onClearSignature();
+      };
+
+      return (
+        <div>
+          <div className="signature-container" style={{ position: 'relative' }}>
+            <canvas ref={canvasRef} className="signature-canvas"
+              onMouseDown={start} onMouseMove={draw} onMouseUp={stop} onMouseLeave={stop}
+              onTouchStart={start} onTouchMove={draw} onTouchEnd={stop} />
+            {isEmpty && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: '#A0AEC0', pointerEvents: 'none' }}>Assine aqui</div>}
+          </div>
+          <div className="signature-actions">
+            <button type="button" className="btn btn-secondary" onClick={clear} style={{ width: 'auto', padding: '6px 12px', fontSize: '0.8rem' }}>Limpar</button>
+          </div>
+        </div>
+      );
+    }
+
+    // 2. CameraCapture
+    function CameraCapture({ onCapture, onClear }) {
+      const [preview, setPreview] = useState(null);
+      const inputRef = useRef(null);
+
+      const handleChange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          setPreview(event.target.result);
+          onCapture(event.target.result);
+        };
+        reader.readAsDataURL(file);
+      };
+
+      const clear = () => {
+        setPreview(null);
+        onClear();
+      };
+
+      return (
+        <div>
+          <input ref={inputRef} type="file" accept="image/*" capture="environment" onChange={handleChange} style={{ display: 'none' }} />
+          {preview ? (
+            <div style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden' }}>
+              <img src={preview} style={{ width: '100%', maxHeight: '200px', objectFit: 'cover' }} />
+              <button type="button" className="btn btn-danger" onClick={clear} style={{ width: 'auto', padding: '4px 10px', fontSize: '0.75rem', position: 'absolute', bottom: '10px', right: '10px' }}>Tirar Outra</button>
+            </div>
+          ) : (
+            <div onClick={() => inputRef.current.click()} style={{ border: '2px dashed var(--azul-secundario)', padding: '30px', borderRadius: '8px', textAlign: 'center', cursor: 'pointer', background: '#F8FAFC' }}>
+              <Camera size={24} color="var(--azul-principal)" />
+              <p style={{ margin: '8px 0 0 0', fontSize: '0.8rem' }}>Tirar Foto do Comprovante</p>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // 3. OfflineIndicator
+    function OfflineIndicator() {
+      const [isOnline, setIsOnline] = useState(navigator.onLine);
+      const [queueCount, setQueueCount] = useState(0);
+      const [syncing, setSyncing] = useState(false);
+
+      const updateQueue = () => setQueueCount(getSyncQueue().length);
+
+      useEffect(() => {
+        const handle = () => {
+          const creds = getCredentials();
+          setIsOnline(!creds.simulateOffline);
+        };
+        window.addEventListener('online', handle);
+        window.addEventListener('offline', () => setIsOnline(false));
+        window.addEventListener('fortegado_queue_update', updateQueue);
+        window.addEventListener('fortegado_credentials_update', handle);
+        updateQueue();
+        handle();
+        return () => {
+          window.removeEventListener('online', handle);
+          window.removeEventListener('offline', () => setIsOnline(false));
+          window.removeEventListener('fortegado_queue_update', updateQueue);
+          window.removeEventListener('fortegado_credentials_update', handle);
+        };
+      }, []);
+
+      const handleSync = async () => {
+        setSyncing(true);
+        try {
+          const res = await syncQueueToSupabase();
+          // Enviar pro Google Sheets também
+          const queue = getSyncQueue();
+          for (const it of queue) {
+            await syncToGoogleSheets(it.actionType, it.payload);
+          }
+          alert(`Sincronização concluída!`);
+          updateQueue();
+        } catch (e) {
+          alert('Erro: ' + e.message);
+        } finally {
+          setSyncing(false);
+        }
+      };
+
+      return (
+        <div className={`connection-bar ${isOnline ? 'online' : 'offline'}`} style={{ borderRadius: '8px', marginBottom: '14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            {isOnline ? <Wifi size={14} /> : <WifiOff size={14} />}
+            <span>{isOnline ? 'Conectado (Online)' : 'Modo Offline'}</span>
+          </div>
+          {queueCount > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span><strong>{queueCount} ações pendentes</strong></span>
+              {isOnline && <button className="btn btn-cta" onClick={handleSync} disabled={syncing} style={{ padding: '2px 8px', fontSize: '0.7rem', width: 'auto' }}>Sincronizar</button>}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // 4. Dashboard
+    function Dashboard({ setView }) {
+      const [metrics, setMetrics] = useState({ todaySales: 0, lowStock: 0, receive: 0, deliveries: 0 });
+      const [user, setUser] = useState({});
+
+      const load = () => {
+        const db = getDb();
+        const creds = getCredentials();
+        setUser(db.usuarios.find(u => u.id === Number(creds.activeUserId)) || {});
+        
+        const total = db.pedidos.filter(p => p.status !== 'Cancelado').reduce((a,c)=>a+c.total, 0);
+        const low = db.estoque.filter(e => (e.quantidade_atual - e.quantidade_reservada) <= e.estoque_minimo).length;
+        const unpaid = db.parcelas.filter(p => !p.pago).reduce((a,c)=>a+c.valor, 0);
+        const deliv = db.pedidos.filter(p => p.status === 'Emitido').length;
+
+        setMetrics({ todaySales: total, lowStock: low, receive: unpaid, deliveries: deliv });
+      };
+
+      useEffect(() => {
+        load();
+        window.addEventListener('fortegado_db_update', load);
+        return () => window.removeEventListener('fortegado_db_update', load);
+      }, []);
+
+      return (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <div>
+              <h2 style={{ fontSize: '1.25rem' }}>Olá, {user.nome}</h2>
+              <span style={{ fontSize: '0.8rem', color: 'var(--cinza-medio)' }}>Perfil: <strong>{user.perfil}</strong></span>
+            </div>
+          </div>
+
+          <div className="dashboard-grid">
+            <div className="card kpi-card kpi-vendas" onClick={() => setView('financeiro')} style={{ cursor: 'pointer' }}>
+              <div className="kpi-title">Total Vendas</div>
+              <div className="kpi-value">R$ {metrics.todaySales.toFixed(2)}</div>
+            </div>
+            <div className="card kpi-card kpi-estoque" onClick={() => setView('estoque')} style={{ cursor: 'pointer' }}>
+              <div className="kpi-title">Estoque Crítico</div>
+              <div className="kpi-value" style={{ color: metrics.lowStock > 0 ? 'red' : 'inherit' }}>{metrics.lowStock}</div>
+            </div>
+            <div className="card kpi-card kpi-financeiro" onClick={() => setView('financeiro')} style={{ cursor: 'pointer' }}>
+              <div className="kpi-title">Contas a Receber</div>
+              <div className="kpi-value">R$ {metrics.receive.toFixed(2)}</div>
+            </div>
+            <div className="card kpi-card kpi-entregas" onClick={() => setView('entregas')} style={{ cursor: 'pointer' }}>
+              <div className="kpi-title">Entregas Pendentes</div>
+              <div className="kpi-value">{metrics.deliveries}</div>
+            </div>
+          </div>
+
+          <div className="shortcuts-grid">
+            <button className="shortcut-btn" onClick={() => setView('novo-pedido')}><ShoppingBag /><span>Novo Pedido</span></button>
+            <button className="shortcut-btn" onClick={() => setView('entregas')}><Truck /><span>Entregas</span></button>
+            <button className="shortcut-btn" onClick={() => setView('estoque')}><Package /><span>Estoque</span></button>
+            <button className="shortcut-btn" onClick={() => setView('financeiro')}><DollarSign /><span>Financeiro</span></button>
+            <button className="shortcut-btn" onClick={() => setView('configuracoes')}><SettingsIcon /><span>Configurações</span></button>
+          </div>
+        </div>
+      );
+    }
+
+    // 5. StockManager
+    function StockManager() {
+      const [list, setList] = useState([]);
+      const [isAdmin, setIsAdmin] = useState(false);
+      const [editItem, setEditItem] = useState(null);
+      const [qty, setQty] = useState(0);
+      const [min, setMin] = useState(0);
+
+      const load = () => {
+        const db = getDb();
+        const creds = getCredentials();
+        const user = db.usuarios.find(u => u.id === Number(creds.activeUserId)) || {};
+        setIsAdmin(user.perfil === 'Administrador');
+
+        const resolved = db.estoque.map(e => {
+          const p = db.produtos.find(pr => pr.id === e.produto_id) || {};
+          const disp = e.quantidade_atual - e.quantidade_reservada;
+          return { ...e, nome: p.nome, codigo: p.codigo, disponivel: disp };
+        });
+        setList(resolved);
+      };
+
+      useEffect(() => {
+        load();
+        window.addEventListener('fortegado_db_update', load);
+        return () => window.removeEventListener('fortegado_db_update', load);
+      }, []);
+
+      const save = (e) => {
+        e.preventDefault();
+        adjustStockLocal(editItem.produto_id, qty, min);
+        setEditItem(null);
+        load();
+      };
+
+      return (
+        <div>
+          <h2>Estoque Físico</h2>
+          <div className="card" style={{ padding: '8px' }}>
+            <table className="data-table">
+              <thead>
+                <tr><th>Produto</th><th>Atual</th><th>Reservado</th><th>Disponível</th>{isAdmin && <th>Ação</th>}</tr>
+              </thead>
+              <tbody>
+                {list.map(it => (
+                  <tr key={it.id}>
+                    <td><strong>{it.nome}</strong><br/><small>{it.codigo}</small></td>
+                    <td>{it.quantidade_atual}</td>
+                    <td>{it.quantidade_reservada}</td>
+                    <td style={{ color: it.disponivel <= it.estoque_minimo ? 'red' : 'green', fontWeight: 'bold' }}>{it.disponivel}</td>
+                    {isAdmin && <td><button className="btn btn-secondary" onClick={() => { setEditItem(it); setQty(it.quantidade_atual); setMin(it.estoque_minimo); }} style={{ padding: '4px 8px', fontSize: '0.75rem' }}>Ajustar</button></td>}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {editItem && (
+            <div className="modal-overlay">
+              <div className="modal-content" style={{ padding: '20px' }}>
+                <h3>Ajustar Estoque: {editItem.nome}</h3>
+                <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+                  <div className="form-group"><label>Qtd Atual</label><input type="number" className="form-control" value={qty} onChange={e=>setQty(Number(e.target.value))} /></div>
+                  <div className="form-group"><label>Mínimo Alerta</label><input type="number" className="form-control" value={min} onChange={e=>setMin(Number(e.target.value))} /></div>
+                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '10px' }}>
+                    <button type="button" className="btn btn-secondary" onClick={()=>setEditItem(null)} style={{ width: 'auto' }}>Cancelar</button>
+                    <button type="submit" className="btn btn-primary" style={{ width: 'auto' }}>Confirmar</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // 6. Financial
+    function Financial() {
+      const [list, setList] = useState([]);
+      const [isAdmin, setIsAdmin] = useState(false);
+
+      const load = () => {
+        const db = getDb();
+        const creds = getCredentials();
+        const user = db.usuarios.find(u => u.id === Number(creds.activeUserId)) || {};
+        setIsAdmin(user.perfil === 'Administrador');
+
+        const resolved = db.parcelas.map(par => {
+          const ped = db.pedidos.find(p => p.id === par.pedido_id) || {};
+          const cli = db.clientes.find(c => c.id === ped.cliente_id) || {};
+          return { ...par, cliente: cli.nome, ref: ped.numero, status: ped.status };
+        }).filter(par => par.status !== 'Cancelado');
+
+        setList(resolved);
+      };
+
+      useEffect(() => {
+        load();
+        window.addEventListener('fortegado_db_update', load);
+        return () => window.removeEventListener('fortegado_db_update', load);
+      }, []);
+
+      const pay = (item) => {
+        if (confirm('Marcar parcela como Paga?')) {
+          receiveInstallmentLocal(item.id);
+          load();
+        }
+      };
+
+      return (
+        <div>
+          <h2>Contas a Receber</h2>
+          <div className="card" style={{ padding: '8px' }}>
+            <table className="data-table">
+              <thead>
+                <tr><th>Cliente</th><th>Vencimento</th><th>Valor</th><th>Status</th>{isAdmin && <th>Ação</th>}</tr>
+              </thead>
+              <tbody>
+                {list.map(it => (
+                  <tr key={it.id} style={{ opacity: it.pago ? 0.6 : 1 }}>
+                    <td><strong>{it.cliente}</strong><br/><small>Ref: {it.ref}</small></td>
+                    <td>{new Date(it.vencimento).toLocaleDateString('pt-BR')}</td>
+                    <td>R$ {it.valor.toFixed(2)}</td>
+                    <td><span className={`badge ${it.pago ? 'badge-entregue' : 'badge-pendente'}`}>{it.pago ? 'Pago' : 'Aberto'}</span></td>
+                    {isAdmin && <td>{!it.pago && <button className="btn btn-cta" onClick={() => pay(it)} style={{ padding: '4px 8px', fontSize: '0.75rem' }}>Receber</button>}</td>}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
+    // 7. Deliveries
+    function Deliveries() {
+      const [list, setList] = useState([]);
+      const [selected, setSelected] = useState(null);
+      const [gps, setGps] = useState(null);
+      const [photo, setPhoto] = useState(null);
+      const [gpsLoading, setGpsLoading] = useState(false);
+
+      const load = () => {
+        const db = getDb();
+        const resolved = db.pedidos.filter(p => p.status === 'Emitido').map(p => {
+          const cli = db.clientes.find(c => c.id === p.cliente_id) || {};
+          return { ...p, cliente: cli.nome, cidade: cli.cidade };
+        });
+        setList(resolved);
+      };
+
+      useEffect(() => {
+        load();
+        window.addEventListener('fortegado_db_update', load);
+        return () => window.removeEventListener('fortegado_db_update', load);
+      }, []);
+
+      const captureGps = () => {
+        setGpsLoading(true);
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(pos => {
+            setGps({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+            setGpsLoading(false);
+          }, err => {
+            setGps({ latitude: -19.7480, longitude: -47.9388 });
+            setGpsLoading(false);
+          });
+        } else {
+          setGps({ latitude: -19.7480, longitude: -47.9388 });
+          setGpsLoading(false);
+        }
+      };
+
+      const confirmDeliv = () => {
+        if (!gps) { alert('Capture a geolocalização!'); return; }
+        if (!photo) { alert('Tire a foto de entrega!'); return; }
+        
+        confirmDeliveryLocal(selected.id, { imagem: photo, latitude: gps.latitude, longitude: gps.longitude });
+        alert('Entrega confirmada com sucesso!');
+        setSelected(null);
+        setGps(null);
+        setPhoto(null);
+        load();
+      };
+
+      return (
+        <div>
+          <h2>Entregas Pendentes</h2>
+          {selected ? (
+            <div className="card">
+              <h3>Entrega: {selected.numero}</h3>
+              <p>Cliente: <strong>{selected.cliente}</strong></p>
+              
+              <div style={{ margin: '14px 0' }}>
+                <label style={{ fontWeight: 'bold' }}>1. Geolocalização</label>
+                <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                  <button className="btn btn-outline" onClick={captureGps} style={{ width: 'auto' }}>
+                    {gpsLoading ? 'Lendo...' : gps ? 'GPS Capturado' : 'Ler GPS'}
+                  </button>
+                  {gps && <span style={{ fontSize: '0.8rem', color: 'green' }}>Lat: {gps.latitude.toFixed(4)}, Lng: {gps.longitude.toFixed(4)}</span>}
+                </div>
+              </div>
+
+              <div style={{ margin: '14px 0' }}>
+                <label style={{ fontWeight: 'bold' }}>2. Foto Comprovante</label>
+                <CameraCapture onCapture={setPhoto} onClear={()=>setPhoto(null)} />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                <button className="btn btn-secondary" onClick={()=>setSelected(null)}>Voltar</button>
+                <button className="btn btn-success" onClick={confirmDeliv}>Confirmar Entrega</button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {list.map(it => (
+                <div key={it.id} className="card" onClick={()=>setSelected(it)} style={{ cursor: 'pointer' }}>
+                  <strong>{it.numero}</strong> – {it.cliente}<br/>
+                  <small>{it.cidade} | Total: R$ {it.total.toFixed(2)}</small>
+                </div>
+              ))}
+              {list.length === 0 && <p>Nenhuma entrega pendente.</p>}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // 8. Settings
+    function Settings({ setView }) {
+      const [creds, setCreds] = useState({ supabaseUrl: '', supabaseAnonKey: '', googleSheetsUrl: '', activeUserId: 2, simulateOffline: false });
+      const [users, setUsers] = useState([]);
+
+      useEffect(() => {
+        setCreds(getCredentials());
+        setUsers(getDb().usuarios || []);
+      }, []);
+
+      const save = (e) => {
+        e.preventDefault();
+        saveCredentials(creds);
+        alert('Configurações salvas!');
+      };
+
+      return (
+        <div>
+          <h2>Configurações</h2>
+          <form onSubmit={save} className="card" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div className="form-group"><label>Supabase URL</label><input type="text" className="form-control" value={creds.supabaseUrl} onChange={e=>setCreds({...creds, supabaseUrl: e.target.value})} /></div>
+            <div className="form-group"><label>Supabase Anon Key</label><input type="password" className="form-control" value={creds.supabaseAnonKey} onChange={e=>setCreds({...creds, supabaseAnonKey: e.target.value})} /></div>
+            <div className="form-group"><label>Google Sheets Apps Script URL</label><input type="text" className="form-control" value={creds.googleSheetsUrl} onChange={e=>setCreds({...creds, googleSheetsUrl: e.target.value})} /></div>
+            <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '10px' }}>
+              <input type="checkbox" checked={creds.simulateOffline} onChange={e=>setCreds({...creds, simulateOffline: e.target.checked})} />
+              <label>Simular Offline</label>
+            </div>
+            <div className="form-group"><label>Usuário Logado</label>
+              <select className="form-control" value={creds.activeUserId} onChange={e=>setCreds({...creds, activeUserId: Number(e.target.value)})}>
+                {users.map(u => <option key={u.id} value={u.id}>{u.nome} ({u.perfil})</option>)}
+              </select>
+            </div>
+            <button type="submit" className="btn btn-primary">Salvar</button>
+          </form>
+          <button className="btn btn-danger" onClick={resetDb} style={{ marginTop: '10px' }}>Resetar Banco Local</button>
+        </div>
+      );
+    }
+
+    // 9. OrderForm (Novo Pedido)
+    function OrderForm({ setView }) {
+      const [step, setStep] = useState(1);
+      const [clients, setClients] = useState([]);
+      const [products, setProducts] = useState([]);
+      const [stock, setStock] = useState([]);
+      
+      // Pedido
+      const [selectedClient, setSelectedClient] = useState('');
+      const [cart, setCart] = useState([]);
+      const [payMethod, setPayMethod] = useState('');
+      const [payCond, setPayCond] = useState('');
+      const [payDetail, setPayDetail] = useState('');
+      const [installments, setInstallments] = useState([]);
+      const [sign, setSign] = useState(null);
+      const [gps, setGps] = useState(null);
+      const [successOrder, setSuccessOrder] = useState(null);
+
+      useEffect(() => {
+        const db = getDb();
+        setClients(db.clientes);
+        setProducts(db.produtos);
+        setStock(db.estoque);
+      }, []);
+
+      const orderTotal = cart.reduce((a,c)=>a + (c.quantidade * c.valor_unitario) - c.desconto, 0);
+
+      const addProduct = (p) => {
+        const est = stock.find(e => e.produto_id === p.id) || {};
+        const disp = est.quantidade_atual - est.quantidade_reservada;
+        if (disp <= 0) { alert('Sem estoque!'); return; }
+
+        const idx = cart.findIndex(c => c.produto_id === p.id);
+        if (idx > -1) {
+          const updated = [...cart];
+          if (updated[idx].quantidade + 1 > disp) { alert('Limite de estoque!'); return; }
+          updated[idx].quantidade++;
+          setCart(updated);
+        } else {
+          setCart([...cart, { produto_id: p.id, quantidade: 1, valor_unitario: p.preco, desconto: 0 }]);
+        }
+      };
+
+      const setQty = (prodId, delta) => {
+        const idx = cart.findIndex(c => c.produto_id === prodId);
+        if (idx === -1) return;
+        const updated = [...cart];
+        const est = stock.find(e => e.produto_id === prodId) || {};
+        const disp = est.quantidade_atual - est.quantidade_reservada;
+        const n = updated[idx].quantidade + delta;
+        if (n <= 0) { setCart(cart.filter(c => c.produto_id !== prodId)); return; }
+        if (n > disp) { alert('Sem estoque disponível!'); return; }
+        updated[idx].quantidade = n;
+        setCart(updated);
+      };
+
+      const generateInstallments = () => {
+        let computed = [];
+        const today = new Date();
+        if (payCond === 'À vista') {
+          computed.push({ vencimento: today.toISOString().split('T')[0], valor: orderTotal });
+        } else if (payCond === 'Prazo direto' && payDetail) {
+          const due = new Date();
+          due.setDate(today.getDate() + Number(payDetail));
+          computed.push({ vencimento: due.toISOString().split('T')[0], valor: orderTotal });
+        } else if (payCond === 'Parcelado' && payDetail) {
+          const intervals = payDetail.split('/').map(Number);
+          const val = orderTotal / intervals.length;
+          intervals.forEach(d => {
+            const due = new Date();
+            due.setDate(today.getDate() + d);
+            computed.push({ vencimento: due.toISOString().split('T')[0], valor: val });
+          });
+        }
+        setInstallments(computed);
+      };
+
+      useEffect(() => {
+        generateInstallments();
+      }, [payCond, payDetail, orderTotal]);
+
+      const captureGps = () => {
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(pos => {
+            setGps({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+          }, err => {
+            setGps({ latitude: -19.7476, longitude: -47.9392 });
+          });
+        } else {
+          setGps({ latitude: -19.7476, longitude: -47.9392 });
+        }
+      };
+
+      const saveOrder = () => {
+        if (!selectedClient) { alert('Selecione o cliente!'); return; }
+        if (cart.length === 0) { alert('Carrinho vazio!'); return; }
+        if (!payMethod) { alert('Forma de pagamento obrigatória!'); return; }
+        if (!gps) { alert('GPS obrigatório!'); return; }
+        if (!sign) { alert('Assinatura obrigatória!'); return; }
+
+        const ped = createOrderLocal({
+          cliente_id: selectedClient,
+          vendedor_id: getCredentials().activeUserId,
+          total: orderTotal,
+          itens: cart,
+          parcelas: installments,
+          assinatura: sign,
+          latitude: gps.latitude,
+          longitude: gps.longitude
+        });
+        setSuccessOrder(ped);
+        setStep(5);
+      };
+
+      const clientObj = clients.find(c => c.id === Number(selectedClient)) || {};
+
+      return (
+        <div>
+          <div className="step-bar">
+            <div className={`step-item ${step >= 1 ? 'active' : ''}`}>1</div>
+            <div className={`step-item ${step >= 2 ? 'active' : ''}`}>2</div>
+            <div className={`step-item ${step >= 3 ? 'active' : ''}`}>3</div>
+            <div className={`step-item ${step >= 4 ? 'active' : ''}`}>4</div>
+            <div className={`step-item ${step >= 5 ? 'active' : ''}`}>5</div>
+          </div>
+
+          {step === 1 && (
+            <div className="card">
+              <h3>Selecionar Cliente</h3>
+              <select className="form-control" value={selectedClient} onChange={e=>setSelectedClient(e.target.value)}>
+                <option value="">-- Escolha --</option>
+                {clients.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select>
+              <button className="btn btn-primary" onClick={() => selectedClient ? setStep(2) : alert('Selecione!')} style={{ marginTop: '15px' }}>Avançar</button>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div>
+              <div className="card">
+                <h3>Produtos</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '150px', overflowY: 'auto' }}>
+                  {products.map(p => {
+                    const est = stock.find(e => e.produto_id === p.id) || {};
+                    const disp = est.quantidade_atual - est.quantidade_reservada;
+                    return (
+                      <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px', background: '#F8FAFC' }}>
+                        <span>{p.nome} (R$ {p.preco}) | Disp: {disp}</span>
+                        <button className="btn btn-primary" onClick={()=>addProduct(p)} style={{ width: 'auto', padding: '2px 8px' }}>Add</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="card">
+                <h3>Itens</h3>
+                {cart.map(c => {
+                  const p = products.find(pr => pr.id === c.produto_id) || {};
+                  return (
+                    <div key={c.produto_id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px' }}>
+                      <span>{p.nome}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <button className="btn btn-secondary" onClick={()=>setQty(c.produto_id, -1)} style={{ width: 'auto', padding: '2px 6px' }}>-</button>
+                        <span>{c.shadow || c.quantidade}</span>
+                        <button className="btn btn-secondary" onClick={()=>setQty(c.produto_id, 1)} style={{ width: 'auto', padding: '2px 6px' }}>+</button>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="cart-total-bar">Total: R$ {orderTotal.toFixed(2)}</div>
+                <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+                  <button className="btn btn-secondary" onClick={()=>setStep(1)}>Voltar</button>
+                  <button className="btn btn-primary" onClick={()=>cart.length > 0 ? setStep(3) : alert('Adicione produtos!')}>Avançar</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="card">
+              <h3>Pagamento</h3>
+              <div className="form-group"><label>Forma de Pagamento</label>
+                <select className="form-control" value={payMethod} onChange={e=>setPayMethod(e.target.value)}>
+                  <option value="">-- Escolha --</option>
+                  <option value="PIX">PIX</option>
+                  <option value="Boleto">Boleto</option>
+                  <option value="Dinheiro">Dinheiro</option>
+                </select>
+              </div>
+              <div className="form-group"><label>Condição</label>
+                <select className="form-control" value={payCond} onChange={e=>{ setPayCond(e.target.value); setPayDetail(''); }}>
+                  <option value="">-- Escolha --</option>
+                  <option value="À vista">À vista</option>
+                  <option value="Prazo direto">Prazo Direto</option>
+                  <option value="Parcelado">Parcelado</option>
+                </select>
+              </div>
+              {payCond === 'Prazo direto' && (
+                <select className="form-control" value={payDetail} onChange={e=>setPayDetail(e.target.value)}>
+                  <option value="">-- Prazo --</option>
+                  <option value="30">30 dias</option><option value="60">60 dias</option>
+                </select>
+              )}
+              {payCond === 'Parcelado' && (
+                <select className="form-control" value={payDetail} onChange={e=>setPayDetail(e.target.value)}>
+                  <option value="">-- Parcelas --</option>
+                  <option value="30/60">30 / 60 dias</option><option value="30/60/90">30/60/90 dias</option>
+                </select>
+              )}
+              <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+                <button className="btn btn-secondary" onClick={()=>setStep(2)}>Voltar</button>
+                <button className="btn btn-primary" onClick={()=>payMethod && payCond ? setStep(4) : alert('Selecione!')}>Avançar</button>
+              </div>
+            </div>
+          )}
+
+          {step === 4 && (
+            <div className="card">
+              <h3>Assinatura & GPS</h3>
+              <button className="btn btn-outline" onClick={captureGps} style={{ marginBottom: '14px' }}>
+                {gps ? `GPS Lido: ${gps.latitude.toFixed(4)}, ${gps.longitude.toFixed(4)}` : 'Ler GPS'}
+              </button>
+              <CanvasSignature onSave={setSign} onClearSignature={()=>setSign(null)} />
+              <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+                <button className="btn btn-secondary" onClick={()=>setStep(3)}>Voltar</button>
+                <button className="btn btn-primary" onClick={saveOrder}>Finalizar Pedido</button>
+              </div>
+            </div>
+          )}
+
+          {step === 5 && (
+            <div className="card" style={{ textAlign: 'center' }}>
+              <CheckCircle size={32} color="green" />
+              <h3>Sucesso!</h3>
+              <p>Pedido: <strong>{successOrder.numero}</strong> cadastrado e estoque reservado!</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '15px' }}>
+                <button className="btn btn-cta" onClick={()=>printOrderPDF(successOrder.id)}>Imprimir Pedido (PDF)</button>
+                <button className="btn btn-success" onClick={() => window.open(`https://wa.me/?text=Pedido+${successOrder.numero}+Emitido`)}>WhatsApp</button>
+                <button className="btn btn-secondary" onClick={()=>setView('dashboard')}>Voltar ao Início</button>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ==========================================
+    // ROTEADOR CENTRAL DA APLICAÇÃO (App)
+    // ==========================================
+    function App() {
+      const [view, setView] = useState('dashboard');
+      const [user, setUser] = useState(null);
+
+      const load = () => {
+        const db = getDb();
+        const creds = getCredentials();
+        setUser(db.usuarios.find(u => u.id === Number(creds.activeUserId)) || {});
+      };
+
+      useEffect(() => {
+        load();
+        window.addEventListener('fortegado_credentials_update', load);
+        window.addEventListener('fortegado_db_update', load);
+        return () => {
+          window.removeEventListener('fortegado_credentials_update', load);
+          window.removeEventListener('fortegado_db_update', load);
+        };
+      }, []);
+
+      return (
+        <div className="app-container">
+          <header>
+            <div className="header-logo-container" onClick={() => setView('dashboard')} style={{ cursor: 'pointer' }}>
+              <span style={{ fontSize: '24px' }}>🐂</span>
+              <div className="header-title">
+                <h1>Forte Gado</h1>
+                <span style={{ fontSize: '0.65rem', color: 'var(--amarelo-cta)', fontWeight: 'bold' }}>Vendas &amp; Estoque</span>
+              </div>
+            </div>
+            <div className="header-meta">
+              <div style={{ fontWeight: 'bold' }}>{user ? user.nome : 'Carregando...'}</div>
+              <div style={{ fontSize: '0.7rem', opacity: 0.8 }}>{user ? user.perfil : ''}</div>
+            </div>
+          </header>
+
+          <main>
+            <OfflineIndicator />
+            {view === 'dashboard' && <Dashboard setView={setView} />}
+            {view === 'novo-pedido' && <OrderForm setView={setView} />}
+            {view === 'entregas' && <Deliveries />}
+            {view === 'estoque' && <StockManager />}
+            {view === 'financeiro' && <Financial />}
+            {view === 'configuracoes' && <Settings setView={setView} />}
+          </main>
+
+          <nav style={{
+            backgroundColor: 'var(--azul-principal)',
+            borderTop: '2px solid var(--dourado-premium)',
+            display: 'flex',
+            justifyContent: 'space-around',
+            padding: '8px 0',
+            position: 'sticky',
+            bottom: 0,
+            zIndex: 100
+          }}>
+            <button onClick={() => setView('dashboard')} style={navItemStyle(view === 'dashboard')}><Home size={18} /><span>Início</span></button>
+            <button onClick={() => setView('novo-pedido')} style={navItemStyle(view === 'novo-pedido')}><ShoppingBag size={18} /><span>Vender</span></button>
+            <button onClick={() => setView('entregas')} style={navItemStyle(view === 'entregas')}><Truck size={18} /><span>Entregas</span></button>
+            <button onClick={() => setView('estoque')} style={navItemStyle(view === 'estoque')}><Package size={18} /><span>Estoque</span></button>
+            <button onClick={() => setView('financeiro')} style={navItemStyle(view === 'financeiro')}><DollarSign size={18} /><span>Contas</span></button>
+            <button onClick={() => setView('configuracoes')} style={navItemStyle(view === 'configuracoes')}><SettingsIcon size={18} /><span>Config</span></button>
+          </nav>
+
+          <footer>Forte Gado © 2026 – Vendas e Estoque.</footer>
+        </div>
+      );
+    }
+
+    const navItemStyle = (isActive) => ({
+      background: 'none', border: 'none',
+      color: isActive ? 'var(--amarelo-cta)' : '#FFFFFF',
+      opacity: isActive ? 1 : 0.75,
+      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px',
+      cursor: 'pointer', fontSize: '0.65rem', fontWeight: 'bold'
+    });
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

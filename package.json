@@ -1,0 +1,29 @@
+{
+  "name": "app-vendas-forte-gado",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "git-init": "git init && git add . && git -c user.name=\"Wislley Prado\" -c user.email=\"prado@fortegado.com.br\" commit -m \"feat: setup env variables, configure supabase and ignore list\"",
+    "git-push": "git remote add origin https://ForteGado:1902Prado%232026@github.com/ForteGado/appvendafortegado.git || git remote set-url origin https://ForteGado:1902Prado%232026@github.com/ForteGado/appvendafortegado.git; git branch -M main; git push -u origin main"
+  },
+  "dependencies": {
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "eslint": "^10.3.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.6.0",
+    "vite": "^8.0.12"
+  }
+}
