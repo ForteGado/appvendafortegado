@@ -25,26 +25,37 @@ export default function Dashboard({ setView }) {
     const hojeStr = new Date().toISOString().split('T')[0];
     const pedidosHoje = db.pedidos.filter(p => {
       const pedDataStr = p.data.split('T')[0];
-      return pedDataStr === hojeStr && p.status !== 'Cancelado';
+      const matchesUser = user.perfil === 'Administrador' || p.vendedor_id === user.id;
+      return pedDataStr === hojeStr && p.status !== 'Cancelado' && matchesUser;
     });
     const totalHoje = pedidosHoje.reduce((acc, curr) => acc + curr.total, 0);
 
-    // Estoque baixo
+    // Estoque baixo (sempre global)
     const estoqueBaixo = db.estoque.filter(est => {
       const disponivel = est.quantidade_atual - est.quantidade_reservada;
       return disponivel <= est.estoque_minimo;
     }).length;
 
-    // Contas a receber (parcelas não pagas e não canceladas)
+    // Contas a receber (parcelas não pagas e não canceladas, filtradas por vendedor se necessário)
     const canceladosIds = db.pedidos.filter(p => p.status === 'Cancelado').map(p => p.id);
-    const parcelasPendentes = db.parcelas.filter(par => !par.pago && !canceladosIds.includes(par.pedido_id));
+    const parcelasPendentes = db.parcelas.filter(par => {
+      const ped = db.pedidos.find(p => p.id === par.pedido_id) || {};
+      const matchesUser = user.perfil === 'Administrador' || ped.vendedor_id === user.id;
+      return !par.pago && !canceladosIds.includes(par.pedido_id) && matchesUser;
+    });
     const totalReceber = parcelasPendentes.reduce((acc, curr) => acc + curr.valor, 0);
 
-    // Entregas pendentes (pedidos com status "Emitido")
-    const pendentes = db.pedidos.filter(p => p.status === 'Emitido').length;
+    // Entregas pendentes (pedidos com status "Emitido", filtrados por vendedor se necessário)
+    const pendentes = db.pedidos.filter(p => {
+      const matchesUser = user.perfil === 'Administrador' || p.vendedor_id === user.id;
+      return p.status === 'Emitido' && matchesUser;
+    }).length;
 
-    // Clientes ativos (pelo menos 1 pedido não cancelado)
-    const pedidosValidos = db.pedidos.filter(p => p.status !== 'Cancelado');
+    // Clientes ativos (pelo menos 1 pedido não cancelado, filtrados por vendedor se necessário)
+    const pedidosValidos = db.pedidos.filter(p => {
+      const matchesUser = user.perfil === 'Administrador' || p.vendedor_id === user.id;
+      return p.status !== 'Cancelado' && matchesUser;
+    });
     const clientesIdsUnicos = new Set(pedidosValidos.map(p => p.cliente_id));
     
     setMetrics({

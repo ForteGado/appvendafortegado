@@ -17,17 +17,22 @@ export default function Financial() {
     setIsAdmin(user && user.perfil === 'Administrador');
 
     // Mapear parcelas com clientes e pedidos correspondentes
-    const mapped = db.parcelas.map(par => {
-      const ped = db.pedidos.find(p => p.id === par.pedido_id) || {};
-      const client = db.clientes.find(c => c.id === ped.cliente_id) || {};
-      
-      return {
-        ...par,
-        clienteNome: client.nome || 'Cliente Desconhecido',
-        pedidoNumero: ped.numero || 'N/A',
-        pedidoStatus: ped.status || ''
-      };
-    });
+    const mapped = db.parcelas
+      .filter(par => {
+        const ped = db.pedidos.find(p => p.id === par.pedido_id) || {};
+        return user && (user.perfil === 'Administrador' || ped.vendedor_id === user.id);
+      })
+      .map(par => {
+        const ped = db.pedidos.find(p => p.id === par.pedido_id) || {};
+        const client = db.clientes.find(c => c.id === ped.cliente_id) || {};
+        
+        return {
+          ...par,
+          clienteNome: client.nome || 'Cliente Desconhecido',
+          pedidoNumero: ped.numero || 'N/A',
+          pedidoStatus: ped.status || ''
+        };
+      });
 
     // Ordenar parcelas pendentes primeiro, e por vencimento
     mapped.sort((a, b) => {

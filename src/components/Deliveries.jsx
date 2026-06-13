@@ -25,7 +25,10 @@ export default function Deliveries() {
 
     // Listar pedidos pendentes de entrega ("Emitido") ou todos se quiser ver histórico
     const pendingOrders = db.pedidos
-      .filter(p => p.status === 'Emitido')
+      .filter(p => {
+        const matchesUser = user && (user.perfil === 'Administrador' || p.vendedor_id === user.id);
+        return p.status === 'Emitido' && matchesUser;
+      })
       .map(p => {
         const client = db.clientes.find(c => c.id === p.cliente_id) || {};
         return {
