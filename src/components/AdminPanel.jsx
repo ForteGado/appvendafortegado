@@ -9,6 +9,7 @@ import {
   getDb, saveDb, resetDb, getCredentials, saveCredentials,
   updateProductPriceLocal, updateProductLocal, createProductLocal, addToSyncQueue
 } from '../services/db';
+import { saveCompanyToSupabase, saveProductToSupabase } from '../services/supabaseService';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (v) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -123,26 +124,42 @@ function ProdutosTab() {
   const startEdit = (p) => { setEditId(p.id); setEditData({ preco: String(p.preco), imagem: p.imagem || null, nome: p.nome, unidade: p.unidade, codigo: p.codigo, descricao: p.descricao || '' }); };
   const cancelEdit = () => { setEditId(null); setEditData({}); };
 
-  const saveEdit = (id) => {
+  const saveEdit = async (id) => {
     const val = parseFloat(String(editData.preco).replace(',', '.'));
     if (isNaN(val) || val < 0) { setMsg({ ok: false, text: 'Preço inválido.' }); return; }
-    updateProductLocal(id, { ...editData, preco: val });
+    const updated = updateProductLocal(id, { ...editData, preco: val });
     setEditId(null);
-    setMsg({ ok: true, text: 'Produto atualizado!' });
     reload();
-    setTimeout(() => setMsg(null), 3000);
+    // Sincronizar diretamente com Supabase
+    if (updated) {
+      const res = await saveProductToSupabase(updated);
+      if (res.success) {
+        setMsg({ ok: true, text: '✅ Produto atualizado e sincronizado com Supabase!' });
+      } else {
+        setMsg({ ok: false, text: `⚠️ Salvo localmente. Erro Supabase: ${res.reason}` });
+      }
+    } else {
+      setMsg({ ok: true, text: 'Produto atualizado localmente.' });
+    }
+    setTimeout(() => setMsg(null), 4000);
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!novoProd.nome) { setMsg({ ok: false, text: 'Nome do produto é obrigatório.' }); return; }
     const val = parseFloat(String(novoProd.preco).replace(',', '.'));
     if (isNaN(val) || val < 0) { setMsg({ ok: false, text: 'Preço inválido.' }); return; }
-    createProductLocal({ ...novoProd, preco: val });
+    const created = createProductLocal({ ...novoProd, preco: val });
     setNovoMode(false);
     setNovoProd({ codigo: '', nome: '', unidade: 'Saco 25kg', preco: '', imagem: null, descricao: '' });
-    setMsg({ ok: true, text: 'Produto cadastrado com sucesso!' });
     reload();
-    setTimeout(() => setMsg(null), 3500);
+    // Sincronizar diretamente com Supabase
+    const res = await saveProductToSupabase(created);
+    if (res.success) {
+      setMsg({ ok: true, text: '✅ Produto cadastrado e sincronizado com Supabase!' });
+    } else {
+      setMsg({ ok: false, text: `⚠️ Produto salvo localmente. Erro Supabase: ${res.reason}` });
+    }
+    setTimeout(() => setMsg(null), 5000);
   };
 
   return (
@@ -436,15 +453,19 @@ function EmpresaTab() {
   const reload = () => { const db = getDb(); setEmpresa(db.empresas?.[0] || {}); };
   useEffect(() => { reload(); }, []);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const db = getDb();
     const updatedEmpresa = { ...db.empresas[0], ...empresa };
     db.empresas[0] = updatedEmpresa;
     saveDb(db);
-    // Sincronizar com Supabase
-    addToSyncQueue('UPDATE_COMPANY', updatedEmpresa);
-    setMsg({ ok: true, text: 'Dados da empresa salvos e sincronizados!' });
-    setTimeout(() => setMsg(null), 3000);
+    // Sincronizar diretamente com Supabase (sem fila)
+    const res = await saveCompanyToSupabase(updatedEmpresa);
+    if (res.success) {
+      setMsg({ ok: true, text: '✅ Empresa salva e sincronizada com Supabase com sucesso!' });
+    } else {
+      setMsg({ ok: false, text: `⚠️ Salvo localmente. Erro no Supabase: ${res.reason}` });
+    }
+    setTimeout(() => setMsg(null), 5000);
   };
 
   return (

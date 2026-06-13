@@ -317,7 +317,76 @@ async function syncUpdateCompany(client, payload) {
   return !error;
 }
 
-// --- Métodos de Puxada de Dados (Sync Down) ---
+// --- Sincronização Direta (Admin — sem fila) ---
+
+/**
+ * Salva dados da empresa diretamente no Supabase.
+ * Usado pelo AdminPanel para garantir atualização imediata.
+ * A logo (base64) é armazenada como TEXT no Supabase.
+ */
+export async function saveCompanyToSupabase(empresaData) {
+  const client = getSupabaseClient();
+  if (!client) return { success: false, reason: 'Supabase não configurado. Configure a URL e Anon Key na aba Integrações.' };
+
+  const { id, ...fields } = empresaData;
+  if (!id) return { success: false, reason: 'ID da empresa não encontrado.' };
+
+  // Tenta UPDATE primeiro
+  const { data: existing, error: fetchErr } = await client
+    .from('empresas')
+    .select('id')
+    .eq('id', id)
+    .single();
+
+  let error;
+  if (!fetchErr && existing) {
+    // Atualiza registro existente
+    ({ error } = await client.from('empresas').update(fields).eq('id', id));
+  } else {
+    // Insere novo registro se não existir
+    ({ error } = await client.from('empresas').insert({ id, ...fields }));
+  }
+
+  if (error) {
+    console.error('[Supabase] Erro ao salvar empresa:', error);
+    // Verificar se é erro de coluna ausente
+    if (error.message?.includes('column') || error.code === '42703') {
+      return { success: false, reason: `Coluna ausente no Supabase: ${error.message}. Execute o SQL de migração.` };
+    }
+    return { success: false, reason: error.message };
+  }
+
+  return { success: true };
+}
+
+/**
+ * Salva produto diretamente no Supabase (upsert).
+ * Usado pelo AdminPanel para atualização imediata de produtos.
+ */
+export async function saveProductToSupabase(produtoData) {
+  const client = getSupabaseClient();
+  if (!client) return { success: false, reason: 'Supabase não configurado.' };
+
+  // Campos de produto aceitos pelo Supabase
+  const payload = {
+    id: produtoData.id,
+    codigo: produtoData.codigo,
+    nome: produtoData.nome,
+    unidade: produtoData.unidade,
+    preco: Number(produtoData.preco),
+    imagem: produtoData.imagem || null,
+    descricao: produtoData.descricao || null
+  };
+
+  const { error } = await client.from('produtos').upsert(payload, { onConflict: 'id' });
+  if (error) {
+    console.error('[Supabase] Erro ao salvar produto:', error);
+    return { success: false, reason: error.message };
+  }
+  return { success: true };
+}
+
+// --- Download de Dados (Sync Down) ---
 
 export async function downloadDataFromSupabase() {
   const client = getSupabaseClient();
