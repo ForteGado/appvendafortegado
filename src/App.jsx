@@ -34,6 +34,12 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (currentUser && currentUser.perfil !== 'Administrador' && view === 'configuracoes') {
+      setView('dashboard');
+    }
+  }, [currentUser, view]);
+
   if (!currentUser) {
     return <Login onLogin={loadUser} />;
   }
@@ -157,14 +163,16 @@ export default function App() {
           <span>Contas</span>
         </button>
 
-        {/* Configurações */}
-        <button 
-          onClick={() => setView('configuracoes')} 
-          style={navItemStyle(view === 'configuracoes')}
-        >
-          <SettingsIcon size={20} />
-          <span>Painel</span>
-        </button>
+        {/* Configurações (Apenas Administrador) */}
+        {currentUser && currentUser.perfil === 'Administrador' && (
+          <button 
+            onClick={() => setView('configuracoes')} 
+            style={navItemStyle(view === 'configuracoes')}
+          >
+            <SettingsIcon size={20} />
+            <span>Painel</span>
+          </button>
+        )}
       </nav>
 
       {/* Footer */}

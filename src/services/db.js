@@ -382,3 +382,15 @@ export function createClientLocal(clientData) {
   addToSyncQueue('CREATE_CLIENT', newClient);
   return newClient;
 }
+
+// Atualizar Preço do Produto (Apenas Administrador)
+export function updateProductPriceLocal(produtoId, novoPreco) {
+  const db = getDb();
+  const prod = db.produtos.find(p => p.id === Number(produtoId));
+  if (prod) {
+    prod.preco = Number(novoPreco);
+    saveDb(db);
+    addToSyncQueue('UPDATE_PRODUCT_PRICE', { id: Number(produtoId), preco: Number(novoPreco) });
+  }
+  return prod;
+}

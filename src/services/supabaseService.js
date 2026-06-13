@@ -56,6 +56,8 @@ export async function syncQueueToSupabase() {
         syncSuccess = await syncReceiveInstallment(client, payload);
       } else if (actionType === 'CREATE_CLIENT') {
         syncSuccess = await syncCreateClient(client, payload);
+      } else if (actionType === 'UPDATE_PRODUCT_PRICE') {
+        syncSuccess = await syncUpdateProductPrice(client, payload);
       }
 
       if (syncSuccess) {
@@ -262,6 +264,13 @@ async function syncCreateClient(client, payload) {
     endereco: payload.endereco,
     cidade: payload.cidade
   });
+  return !error;
+}
+
+async function syncUpdateProductPrice(client, payload) {
+  const { error } = await client.from('produtos').update({
+    preco: payload.preco
+  }).eq('id', payload.id);
   return !error;
 }
 
