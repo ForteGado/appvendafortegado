@@ -26,4 +26,6 @@ dist-ssr
 # Environment variables
 .env
 .env.*
+git-push.sh
+
 

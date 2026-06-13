@@ -12,6 +12,8 @@
     "git-push": "git remote add origin https://ForteGado:1902Prado%232026@github.com/ForteGado/appvendafortegado.git || git remote set-url origin https://ForteGado:1902Prado%232026@github.com/ForteGado/appvendafortegado.git; git branch -M main; git push -u origin main"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.48.0",
+    "lucide-react": "^0.469.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },
