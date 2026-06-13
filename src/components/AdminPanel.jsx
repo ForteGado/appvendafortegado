@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import {
   getDb, saveDb, resetDb, getCredentials, saveCredentials,
-  updateProductPriceLocal, updateProductLocal, createProductLocal
+  updateProductPriceLocal, updateProductLocal, createProductLocal, addToSyncQueue
 } from '../services/db';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -438,9 +438,12 @@ function EmpresaTab() {
 
   const handleSave = () => {
     const db = getDb();
-    db.empresas[0] = { ...db.empresas[0], ...empresa };
+    const updatedEmpresa = { ...db.empresas[0], ...empresa };
+    db.empresas[0] = updatedEmpresa;
     saveDb(db);
-    setMsg({ ok: true, text: 'Dados da empresa salvos com sucesso!' });
+    // Sincronizar com Supabase
+    addToSyncQueue('UPDATE_COMPANY', updatedEmpresa);
+    setMsg({ ok: true, text: 'Dados da empresa salvos e sincronizados!' });
     setTimeout(() => setMsg(null), 3000);
   };
 

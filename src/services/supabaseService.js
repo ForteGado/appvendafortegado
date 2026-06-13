@@ -58,6 +58,15 @@ export async function syncQueueToSupabase() {
         syncSuccess = await syncCreateClient(client, payload);
       } else if (actionType === 'UPDATE_PRODUCT_PRICE') {
         syncSuccess = await syncUpdateProductPrice(client, payload);
+      } else if (actionType === 'UPDATE_PRODUCT') {
+        syncSuccess = await syncUpdateProduct(client, payload);
+      } else if (actionType === 'CREATE_PRODUCT') {
+        syncSuccess = await syncCreateProduct(client, payload);
+      } else if (actionType === 'UPDATE_COMPANY') {
+        syncSuccess = await syncUpdateCompany(client, payload);
+      } else {
+        // Tipo desconhecido: remove da fila para não bloquear
+        syncSuccess = true;
       }
 
       if (syncSuccess) {
@@ -271,6 +280,40 @@ async function syncUpdateProductPrice(client, payload) {
   const { error } = await client.from('produtos').update({
     preco: payload.preco
   }).eq('id', payload.id);
+  return !error;
+}
+
+async function syncUpdateProduct(client, payload) {
+  const { id, ...updates } = payload;
+  // Apenas campos aceitos pelo Supabase (sem id)
+  const { error } = await client.from('produtos').update(updates).eq('id', id);
+  return !error;
+}
+
+async function syncCreateProduct(client, payload) {
+  const { error } = await client.from('produtos').insert({
+    id: payload.id,
+    codigo: payload.codigo,
+    nome: payload.nome,
+    unidade: payload.unidade,
+    preco: payload.preco,
+    imagem: payload.imagem || null,
+    descricao: payload.descricao || null
+  });
+  if (error) return false;
+  // Criar entrada de estoque zerada
+  await client.from('estoque').insert({
+    produto_id: payload.id,
+    quantidade_atual: 0,
+    quantidade_reservada: 0,
+    estoque_minimo: 5
+  });
+  return true;
+}
+
+async function syncUpdateCompany(client, payload) {
+  const { id, ...updates } = payload;
+  const { error } = await client.from('empresas').update(updates).eq('id', id);
   return !error;
 }
 

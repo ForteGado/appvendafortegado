@@ -14,8 +14,9 @@ import Login from './components/Login';
 import { getDb, getCredentials, saveCredentials } from './services/db';
 
 export default function App() {
-  const [view, setView] = useState('dashboard'); // dashboard, novo-pedido, entregas, estoque, financeiro, configuracoes
+  const [view, setView] = useState('dashboard');
   const [currentUser, setCurrentUser] = useState(null);
+  const [empresa, setEmpresa] = useState({ nome: 'Forte Gado', logotipo: '🐂' });
 
   const loadUser = () => {
     const db = getDb();
@@ -24,13 +25,21 @@ export default function App() {
     setCurrentUser(user || null);
   };
 
+  const loadEmpresa = () => {
+    const db = getDb();
+    if (db.empresas?.[0]) setEmpresa(db.empresas[0]);
+  };
+
   useEffect(() => {
     loadUser();
+    loadEmpresa();
     window.addEventListener('fortegado_credentials_update', loadUser);
     window.addEventListener('fortegado_db_update', loadUser);
+    window.addEventListener('fortegado_db_update', loadEmpresa);
     return () => {
       window.removeEventListener('fortegado_credentials_update', loadUser);
       window.removeEventListener('fortegado_db_update', loadUser);
+      window.removeEventListener('fortegado_db_update', loadEmpresa);
     };
   }, []);
 
@@ -49,9 +58,18 @@ export default function App() {
       {/* Header Fixo */}
       <header>
         <div className="header-logo-container" onClick={() => setView('dashboard')} style={{ cursor: 'pointer' }}>
-          <span style={{ fontSize: '24px' }}>🐂</span>
+          {/* Logo dinâmica — lida do banco de dados */}
+          {empresa.logotipo && empresa.logotipo.startsWith('data:') ? (
+            <img
+              src={empresa.logotipo}
+              alt="Logo"
+              style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.3)' }}
+            />
+          ) : (
+            <span style={{ fontSize: '24px' }}>{empresa.logotipo || '🐂'}</span>
+          )}
           <div className="header-title">
-            <h1>Forte Gado</h1>
+            <h1>{empresa.nome || 'Forte Gado'}</h1>
             <span style={{ fontSize: '0.65rem', color: 'var(--amarelo-cta)', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               Vendas & Estoque
             </span>
