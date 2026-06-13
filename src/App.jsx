@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Home, ShoppingBag, Truck, Package, DollarSign, Settings as SettingsIcon, LogOut } from 'lucide-react';
+import { Home, ShoppingBag, Truck, Package, DollarSign, ShieldCheck, LogOut } from 'lucide-react';
 
 // Importando componentes
 import Dashboard from './components/Dashboard';
@@ -7,7 +7,7 @@ import OrderForm from './components/OrderForm';
 import Deliveries from './components/Deliveries';
 import StockManager from './components/StockManager';
 import Financial from './components/Financial';
-import Settings from './components/Settings';
+import AdminPanel from './components/AdminPanel';
 import OfflineIndicator from './components/OfflineIndicator';
 import Login from './components/Login';
 
@@ -35,7 +35,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (currentUser && currentUser.perfil !== 'Administrador' && view === 'configuracoes') {
+    if (currentUser && currentUser.perfil !== 'Administrador' && view === 'admin') {
       setView('dashboard');
     }
   }, [currentUser, view]);
@@ -103,7 +103,7 @@ export default function App() {
         {view === 'entregas' && <Deliveries />}
         {view === 'estoque' && <StockManager />}
         {view === 'financeiro' && <Financial />}
-        {view === 'configuracoes' && <Settings setView={setView} />}
+        {view === 'admin' && currentUser?.perfil === 'Administrador' && <AdminPanel currentUser={currentUser} />}
       </main>
 
       {/* Navegação Inferior (Mobile-first, Premium) */}
@@ -163,14 +163,14 @@ export default function App() {
           <span>Contas</span>
         </button>
 
-        {/* Configurações (Apenas Administrador) */}
+        {/* Painel Admin (Apenas Administrador) */}
         {currentUser && currentUser.perfil === 'Administrador' && (
           <button 
-            onClick={() => setView('configuracoes')} 
-            style={navItemStyle(view === 'configuracoes')}
+            onClick={() => setView('admin')} 
+            style={navItemStyle(view === 'admin')}
           >
-            <SettingsIcon size={20} />
-            <span>Painel</span>
+            <ShieldCheck size={20} />
+            <span>Admin</span>
           </button>
         )}
       </nav>
