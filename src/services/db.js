@@ -394,3 +394,37 @@ export function updateProductPriceLocal(produtoId, novoPreco) {
   }
   return prod;
 }
+
+// Atualizar dados completos do Produto (Apenas Administrador)
+export function updateProductLocal(produtoId, updates) {
+  const db = getDb();
+  const prod = db.produtos.find(p => p.id === Number(produtoId));
+  if (prod) {
+    Object.assign(prod, updates);
+    saveDb(db);
+    addToSyncQueue('UPDATE_PRODUCT', { id: Number(produtoId), ...updates });
+  }
+  return prod;
+}
+
+// Cadastrar Novo Produto (Apenas Administrador)
+export function createProductLocal(productData) {
+  const db = getDb();
+  const nextId = db.produtos.length > 0 ? Math.max(...db.produtos.map(p => p.id)) + 1 : 1;
+  const newProduct = {
+    id: nextId,
+    codigo: productData.codigo || `PRD${String(nextId).padStart(3, '0')}`,
+    nome: productData.nome,
+    unidade: productData.unidade || 'Un',
+    preco: Number(productData.preco) || 0,
+    imagem: productData.imagem || null,
+    descricao: productData.descricao || ''
+  };
+  db.produtos.push(newProduct);
+  // Criar entrada de estoque zerada
+  const nextEstId = db.estoque.length > 0 ? Math.max(...db.estoque.map(e => e.id)) + 1 : 1;
+  db.estoque.push({ id: nextEstId, produto_id: nextId, quantidade_atual: 0, quantidade_reservada: 0, estoque_minimo: 5 });
+  saveDb(db);
+  addToSyncQueue('CREATE_PRODUCT', newProduct);
+  return newProduct;
+}
