@@ -253,6 +253,10 @@ async function syncCreateClient(client, payload) {
   const { error } = await client.from('clientes').insert({
     id: payload.id,
     nome: payload.nome,
+    nome_produtor: payload.nome_produtor || null,
+    nome_fazenda: payload.nome_fazenda || null,
+    latitude: payload.latitude || null,
+    longitude: payload.longitude || null,
     cpf_cnpj: payload.cpf_cnpj,
     telefone: payload.telefone,
     endereco: payload.endereco,

@@ -34,8 +34,9 @@ export default function OrderForm({ setView }) {
   // Modo de Cadastro Rápido de Cliente
   const [isNewClientMode, setIsNewClientMode] = useState(false);
   const [newClientData, setNewClientData] = useState({
-    nome: '', cpf_cnpj: '', telefone: '', endereco: '', cidade: ''
+    nome_produtor: '', nome_fazenda: '', cpf_cnpj: '', telefone: '', endereco: '', cidade: '', latitude: '', longitude: ''
   });
+  const [clientGpsLoading, setClientGpsLoading] = useState(false);
 
   // Alertas e Mensagens de Validação
   const [alertMsg, setAlertMsg] = useState('');
@@ -226,16 +227,60 @@ export default function OrderForm({ setView }) {
   // Cadastrar Cliente Rápido
   const handleCreateClient = (e) => {
     e.preventDefault();
-    if (!newClientData.nome) {
-      setAlertMsg('O nome do cliente é obrigatório.');
+    if (!newClientData.nome_fazenda) {
+      setAlertMsg('O nome da fazenda é obrigatório.');
+      return;
+    }
+    if (!newClientData.nome_produtor) {
+      setAlertMsg('O nome do produtor é obrigatório.');
       return;
     }
     const newClient = createClientLocal(newClientData);
     setDbClients([...dbClients, newClient]);
     setSelectedClientId(newClient.id);
     setIsNewClientMode(false);
-    setNewClientData({ nome: '', cpf_cnpj: '', telefone: '', endereco: '', cidade: '' });
+    setNewClientData({ nome_produtor: '', nome_fazenda: '', cpf_cnpj: '', telefone: '', endereco: '', cidade: '', latitude: '', longitude: '' });
     setAlertMsg('');
+  };
+
+  const handleFetchClientLocation = () => {
+    setClientGpsLoading(true);
+    setAlertMsg('');
+
+    if (!navigator.geolocation) {
+      setTimeout(() => {
+        setNewClientData(prev => ({
+          ...prev,
+          latitude: -19.7476,
+          longitude: -47.9392
+        }));
+        setClientGpsLoading(false);
+      }, 600);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setNewClientData(prev => ({
+          ...prev,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        }));
+        setClientGpsLoading(false);
+      },
+      (error) => {
+        console.warn('Geolocation failed for client registration, using fallback:', error);
+        setTimeout(() => {
+          setNewClientData(prev => ({
+            ...prev,
+            latitude: -19.7476,
+            longitude: -47.9392
+          }));
+          setClientGpsLoading(false);
+        }, 600);
+      },
+      { enableHighAccuracy: true, timeout: 5000 }
+    );
   };
 
   // --- GESTÃO DO CARRINHO DE COMPRAS ---
@@ -443,13 +488,25 @@ export default function OrderForm({ setView }) {
           {isNewClientMode ? (
             <form onSubmit={handleCreateClient} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <div className="form-group">
-                <label>Razão Social / Nome do Produtor</label>
+                <label>Razão Social / Nome da Fazenda</label>
                 <input
                   type="text"
                   className="form-control"
-                  value={newClientData.nome}
-                  onChange={(e) => setNewClientData({ ...newClientData, nome: e.target.value })}
+                  value={newClientData.nome_fazenda}
+                  onChange={(e) => setNewClientData({ ...newClientData, nome_fazenda: e.target.value })}
                   placeholder="Ex: Fazenda Campo Alegre"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Nome do Produtor</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={newClientData.nome_produtor}
+                  onChange={(e) => setNewClientData({ ...newClientData, nome_produtor: e.target.value })}
+                  placeholder="Ex: Carlos Alberto"
                   required
                 />
               </div>
@@ -497,6 +554,37 @@ export default function OrderForm({ setView }) {
                     onChange={(e) => setNewClientData({ ...newClientData, endereco: e.target.value })}
                     placeholder="Estrada Rural, Km 15"
                   />
+                </div>
+              </div>
+
+              {/* Captura de Localização GPS do Cliente */}
+              <div className="form-group" style={{ backgroundColor: 'var(--cinza-ultra-claro)', padding: '12px', borderRadius: '8px', border: '1px solid var(--cinza-claro)' }}>
+                <label style={{ display: 'block', fontWeight: 'bold', fontSize: '0.8rem', marginBottom: '6px' }}>
+                  Localização da Fazenda (Opcional, mas recomendado para áreas sem rua)
+                </label>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={handleFetchClientLocation}
+                    disabled={clientGpsLoading}
+                    style={{ width: 'auto', padding: '8px 14px', fontSize: '0.8rem' }}
+                  >
+                    {clientGpsLoading ? (
+                      <>
+                        <RefreshCw size={14} className="spin-anim" /> Capturando...
+                      </>
+                    ) : (
+                      <>
+                        <MapPin size={14} /> {newClientData.latitude ? 'GPS Capturado' : 'Obter GPS'}
+                      </>
+                    )}
+                  </button>
+                  {newClientData.latitude && (
+                    <span style={{ fontSize: '0.75rem', color: 'var(--verde-escuro)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <CheckCircle size={12} /> Lat: {Number(newClientData.latitude).toFixed(5)}, Lng: {Number(newClientData.longitude).toFixed(5)}
+                    </span>
+                  )}
                 </div>
               </div>
 

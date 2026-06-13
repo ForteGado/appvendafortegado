@@ -28,10 +28,14 @@ CREATE TABLE IF NOT EXISTS public.usuarios (
 CREATE TABLE IF NOT EXISTS public.clientes (
     id SERIAL PRIMARY KEY,
     nome VARCHAR(255) NOT NULL,
+    nome_produtor VARCHAR(255),
+    nome_fazenda VARCHAR(255),
     cpf_cnpj VARCHAR(20) UNIQUE,
     telefone VARCHAR(20),
     endereco TEXT,
     cidade VARCHAR(100),
+    latitude NUMERIC(10, 8),
+    longitude NUMERIC(11, 8),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -123,13 +127,13 @@ VALUES
 (2, 'Silva Vendedor', 'silva@fortegado.com.br', 'Vendedor', true)
 ON CONFLICT (email) DO NOTHING;
 
-INSERT INTO public.clientes (id, nome, cpf_cnpj, telefone, endereco, cidade)
+INSERT INTO public.clientes (id, nome, nome_produtor, nome_fazenda, cpf_cnpj, telefone, endereco, cidade, latitude, longitude)
 VALUES 
-(1, 'Fazenda Bela Vista (Carlos)', '11.222.333/0001-44', '(34) 98888-2222', 'Estrada Geral, Zona Rural', 'Uberaba'),
-(2, 'Agropecuária São José', '22.333.444/0001-55', '(34) 98777-3333', 'Av. Brasil, 120, Centro', 'Sacramento'),
-(3, 'Haras Imperial (Dra. Ana)', '33.444.555/0001-66', '(16) 99666-4444', 'Rodovia SP-330, Km 310', 'Ribeirão Preto'),
-(4, 'Fazenda Santa Maria (José)', '44.555.666/0001-77', '(34) 99555-5555', 'Vicinal dos Ipês, Km 8', 'Conquista'),
-(5, 'Recanto Feliz Agro', '55.666.777/0001-88', '(34) 99111-6666', 'Fazenda Recanto Feliz', 'Delta')
+(1, 'Fazenda Bela Vista (Carlos)', 'Carlos', 'Fazenda Bela Vista', '11.222.333/0001-44', '(34) 98888-2222', 'Estrada Geral, Zona Rural', 'Uberaba', -19.7476, -47.9392),
+(2, 'Agropecuária São José (José)', 'José', 'Agropecuária São José', '22.333.444/0001-55', '(34) 98777-3333', 'Av. Brasil, 120, Centro', 'Sacramento', -19.7345, -47.9022),
+(3, 'Haras Imperial (Dra. Ana)', 'Dra. Ana', 'Haras Imperial', '33.444.555/0001-66', '(16) 99666-4444', 'Rodovia SP-330, Km 310', 'Ribeirão Preto', -21.1704, -47.8103),
+(4, 'Fazenda Santa Maria (José)', 'José', 'Fazenda Santa Maria', '44.555.666/0001-77', '(34) 99555-5555', 'Vicinal dos Ipês, Km 8', 'Conquista', -20.0245, -47.6432),
+(5, 'Recanto Feliz Agro (Sebastião)', 'Sebastião', 'Recanto Feliz Agro', '55.666.777/0001-88', '(34) 99111-6666', 'Fazenda Recanto Feliz', 'Delta', -20.1456, -47.7789)
 ON CONFLICT (cpf_cnpj) DO NOTHING;
 
 INSERT INTO public.produtos (id, codigo, nome, unidade, preco)

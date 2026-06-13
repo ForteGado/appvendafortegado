@@ -32,7 +32,9 @@ export default function Deliveries() {
           ...p,
           clienteNome: client.nome || 'Cliente Desconhecido',
           clienteCidade: client.cidade || '',
-          clienteEndereco: client.endereco || ''
+          clienteEndereco: client.endereco || '',
+          clienteLatitude: client.latitude,
+          clienteLongitude: client.longitude
         };
       });
 
@@ -192,7 +194,24 @@ export default function Deliveries() {
             <p><strong>Cliente:</strong> {selectedOrder.clienteNome}</p>
             <p><strong>Cidade:</strong> {selectedOrder.clienteCidade}</p>
             <p><strong>Endereço:</strong> {selectedOrder.clienteEndereco}</p>
-            <p><strong>Total Pedido:</strong> R$ {selectedOrder.total.toFixed(2)}</p>
+            {selectedOrder.clienteLatitude && selectedOrder.clienteLongitude && (
+              <p style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', marginBottom: '6px' }}>
+                <strong>Localização:</strong> 
+                <span style={{ color: 'var(--azul-principal)', fontWeight: '600' }}>
+                  {selectedOrder.clienteLatitude.toFixed(5)}, {selectedOrder.clienteLongitude.toFixed(5)}
+                </span>
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${selectedOrder.clienteLatitude},${selectedOrder.clienteLongitude}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-outline"
+                  style={{ display: 'inline-flex', width: 'auto', padding: '4px 10px', fontSize: '0.75rem', gap: '4px' }}
+                >
+                  <Navigation size={12} /> Ver no Mapa / Rota
+                </a>
+              </p>
+            )}
+            <p style={{ marginTop: '6px' }}><strong>Total Pedido:</strong> R$ {selectedOrder.total.toFixed(2)}</p>
           </div>
 
           {validationError && (
