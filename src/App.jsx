@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Home, ShoppingBag, Truck, Package, DollarSign, Settings as SettingsIcon } from 'lucide-react';
+import { Home, ShoppingBag, Truck, Package, DollarSign, Settings as SettingsIcon, LogOut } from 'lucide-react';
 
 // Importando componentes
 import Dashboard from './components/Dashboard';
@@ -9,8 +9,9 @@ import StockManager from './components/StockManager';
 import Financial from './components/Financial';
 import Settings from './components/Settings';
 import OfflineIndicator from './components/OfflineIndicator';
+import Login from './components/Login';
 
-import { getDb, getCredentials } from './services/db';
+import { getDb, getCredentials, saveCredentials } from './services/db';
 
 export default function App() {
   const [view, setView] = useState('dashboard'); // dashboard, novo-pedido, entregas, estoque, financeiro, configuracoes
@@ -19,8 +20,8 @@ export default function App() {
   const loadUser = () => {
     const db = getDb();
     const creds = getCredentials();
-    const user = db.usuarios.find(u => u.id === Number(creds.activeUserId)) || db.usuarios[0];
-    setCurrentUser(user);
+    const user = db.usuarios.find(u => u.id === Number(creds.activeUserId));
+    setCurrentUser(user || null);
   };
 
   useEffect(() => {
@@ -32,6 +33,10 @@ export default function App() {
       window.removeEventListener('fortegado_db_update', loadUser);
     };
   }, []);
+
+  if (!currentUser) {
+    return <Login onLogin={loadUser} />;
+  }
 
   return (
     <div className="app-container">
@@ -46,9 +51,38 @@ export default function App() {
             </span>
           </div>
         </div>
-        <div className="header-meta">
-          <div style={{ fontWeight: 'bold' }}>{currentUser ? currentUser.nome : 'Carregando...'}</div>
-          <div style={{ fontSize: '0.7rem', opacity: 0.8 }}>{currentUser ? currentUser.perfil : ''}</div>
+        <div className="header-meta" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontWeight: 'bold' }}>{currentUser.nome}</div>
+            <div style={{ fontSize: '0.7rem', opacity: 0.8 }}>{currentUser.perfil}</div>
+          </div>
+          <button
+            onClick={() => {
+              if (window.confirm('Deseja realmente sair do sistema?')) {
+                const creds = getCredentials();
+                creds.activeUserId = null;
+                saveCredentials(creds);
+                loadUser();
+              }
+            }}
+            style={{
+              background: 'rgba(255, 255, 255, 0.1)',
+              border: 'none',
+              borderRadius: '50%',
+              width: '32px',
+              height: '32px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white',
+              cursor: 'pointer',
+              transition: 'background 0.2s',
+              outline: 'none'
+            }}
+            title="Sair do Sistema"
+          >
+            <LogOut size={16} />
+          </button>
         </div>
       </header>
 

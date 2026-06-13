@@ -102,7 +102,7 @@ export function getCredentials() {
     supabaseUrl: import.meta.env.VITE_SUPABASE_URL || '',
     supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY || '',
     googleSheetsUrl: '',
-    activeUserId: 2,
+    activeUserId: null,
     simulateOffline: false
   };
   if (!data) {

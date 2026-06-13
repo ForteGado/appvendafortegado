@@ -127,18 +127,28 @@ export default function Settings({ setView }) {
 
         {/* Usuário Logado */}
         <div className="form-group" style={{ marginTop: '10px' }}>
-          <label>Vendedor Logado (Simulação)</label>
-          <select
-            className="form-control"
-            value={config.activeUserId}
-            onChange={(e) => setConfig({ ...config, activeUserId: Number(e.target.value) })}
-          >
-            {dbUsers.map(u => (
-              <option key={u.id} value={u.id}>
-                {u.nome} ({u.perfil})
-              </option>
-            ))}
-          </select>
+          <label>Usuário Ativo</label>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--cinza-ultra-claro)', padding: '12px', borderRadius: '8px', border: '1px solid var(--cinza-claro)' }}>
+            <div>
+              <strong style={{ color: 'var(--azul-principal)' }}>{dbUsers.find(u => u.id === config.activeUserId)?.nome || 'Nenhum'}</strong>
+              <div style={{ fontSize: '0.75rem', color: 'var(--cinza-medio)' }}>Perfil: {dbUsers.find(u => u.id === config.activeUserId)?.perfil || ''}</div>
+            </div>
+            <button
+              type="button"
+              className="btn btn-outline"
+              onClick={() => {
+                if (window.confirm('Deseja realmente sair do sistema?')) {
+                  const creds = getCredentials();
+                  creds.activeUserId = null;
+                  saveCredentials(creds);
+                  window.location.reload();
+                }
+              }}
+              style={{ width: 'auto', padding: '6px 12px', fontSize: '0.8rem', display: 'flex', gap: '4px', alignItems: 'center', borderColor: 'var(--vermelho-cancelar)', color: 'var(--vermelho-cancelar)' }}
+            >
+              <LogOut size={14} /> Sair
+            </button>
+          </div>
         </div>
 
         <button type="submit" className="btn btn-primary" style={{ marginTop: '16px' }}>
