@@ -3,7 +3,7 @@ import {
   Save, RefreshCw, CheckCircle,
   DollarSign, Users, Package, Building2,
   Edit3, X, Plus, ShieldCheck, AlertTriangle,
-  Image, Upload, Trash2, Camera
+  Upload, Trash2, Camera
 } from 'lucide-react';
 import {
   getDb, saveDb,
@@ -41,7 +41,7 @@ function ImageUploader({ value, onChange, size = 80, label = 'Imagem', shape = '
         const reader = new FileReader();
         reader.readAsDataURL(file);
         reader.onload = (event) => {
-          const img = new Image();
+          const img = new window.Image();
           img.src = event.target.result;
           img.onload = () => {
             const canvas = document.createElement('canvas');
@@ -490,7 +490,11 @@ function EmpresaTab() {
   const [msg, setMsg] = useState(null);
 
   const reload = () => { const db = getDb(); setEmpresa(db.empresas?.[0] || {}); };
-  useEffect(() => { reload(); }, []);
+  useEffect(() => {
+    reload();
+    window.addEventListener('fortegado_db_update', reload);
+    return () => window.removeEventListener('fortegado_db_update', reload);
+  }, []);
 
   const handleSave = async () => {
     const db = getDb();
