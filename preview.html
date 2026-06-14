@@ -1563,6 +1563,7 @@
                     <th>Comprador (Cliente)</th>
                     <th>Pedido Ref.</th>
                     <th>Data Venda</th>
+                    <th>Vencimento</th>
                     <th>Data Recebimento</th>
                     <th>Status Pagamento</th>
                     <th class="text-right">Valor Parcela</th>
@@ -1574,6 +1575,7 @@
                       <td><strong>${it.cliente}</strong></td>
                       <td>${it.ref}</td>
                       <td>${new Date(it.dataVenda).toLocaleDateString('pt-BR')}</td>
+                      <td>${new Date(it.vencimento).toLocaleDateString('pt-BR')}</td>
                       <td>${it.pago ? new Date(it.dataPagamento).toLocaleDateString('pt-BR') : 'Pendente'}</td>
                       <td>
                         <span class="badge ${it.pago ? 'badge-pago' : 'badge-aberto'}">
