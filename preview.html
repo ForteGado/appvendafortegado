@@ -253,7 +253,20 @@
 
     function getCredentials() {
       const data = localStorage.getItem(CREDENTIALS_KEY);
-      return data ? JSON.parse(data) : { supabaseUrl: '', supabaseAnonKey: '', googleSheetsUrl: '', activeUserId: 2, simulateOffline: false };
+      const defaultCreds = {
+        supabaseUrl: 'https://appfortegado.vendopro.com.br',
+        supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ewogICJyb2xlIjogImFub24iLAogICJpc3MiOiAic3VwYWJhc2UiLAogICJpYXQiOiAxNzE1MDUwODAwLAogICJleHAiOiAxODcyODE3MjAwCn0.xqOuPBjRM7dEEnbQqrhYm4gah1S0vPaIOEDPB6UbLDU',
+        googleSheetsUrl: '',
+        activeUserId: 2,
+        simulateOffline: false
+      };
+      if (!data) {
+        return defaultCreds;
+      }
+      const parsed = JSON.parse(data);
+      if (!parsed.supabaseUrl) parsed.supabaseUrl = defaultCreds.supabaseUrl;
+      if (!parsed.supabaseAnonKey) parsed.supabaseAnonKey = defaultCreds.supabaseAnonKey;
+      return parsed;
     }
 
     function saveCredentials(creds) {

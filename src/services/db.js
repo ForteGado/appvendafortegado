@@ -200,8 +200,8 @@ export function resetDb() {
 export function getCredentials() {
   const data = localStorage.getItem(CREDENTIALS_KEY);
   const defaultCreds = {
-    supabaseUrl: import.meta.env.VITE_SUPABASE_URL || '',
-    supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+    supabaseUrl: import.meta.env.VITE_SUPABASE_URL || 'https://appfortegado.vendopro.com.br',
+    supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ewogICJyb2xlIjogImFub24iLAogICJpc3MiOiAic3VwYWJhc2UiLAogICJpYXQiOiAxNzE1MDUwODAwLAogICJleHAiOiAxODcyODE3MjAwCn0.xqOuPBjRM7dEEnbQqrhYm4gah1S0vPaIOEDPB6UbLDU',
     googleSheetsUrl: '',
     activeUserId: null,
     simulateOffline: false
