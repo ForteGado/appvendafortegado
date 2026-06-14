@@ -12,6 +12,7 @@ import OfflineIndicator from './components/OfflineIndicator';
 import Login from './components/Login';
 
 import { getDb, getCredentials, saveCredentials } from './services/db';
+import { downloadDataFromSupabase } from './services/supabaseService';
 
 export default function App() {
   const [view, setView] = useState('dashboard');
@@ -33,6 +34,22 @@ export default function App() {
   useEffect(() => {
     loadUser();
     loadEmpresa();
+
+    // Sincronizar/Baixar os dados mais recentes do Supabase na inicialização
+    const syncOnStartup = async () => {
+      try {
+        const res = await downloadDataFromSupabase();
+        if (res.success) {
+          console.log('[Supabase] Dados baixados e sincronizados com sucesso na inicialização.');
+          loadUser();
+          loadEmpresa();
+        }
+      } catch (e) {
+        console.error('[Supabase] Falha na sincronização inicial:', e);
+      }
+    };
+    syncOnStartup();
+
     window.addEventListener('fortegado_credentials_update', loadUser);
     window.addEventListener('fortegado_db_update', loadUser);
     window.addEventListener('fortegado_db_update', loadEmpresa);
