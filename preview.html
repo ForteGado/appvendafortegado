@@ -1714,11 +1714,13 @@
     function App() {
       const [view, setView] = useState('dashboard');
       const [user, setUser] = useState(null);
+      const [empresa, setEmpresa] = useState({ nome: 'Forte Gado', logotipo: '🐂' });
 
       const load = () => {
         const db = getDb();
         const creds = getCredentials();
         setUser(db.usuarios.find(u => u.id === Number(creds.activeUserId)) || {});
+        if (db.empresas?.[0]) setEmpresa(db.empresas[0]);
       };
 
       useEffect(() => {
@@ -1729,7 +1731,7 @@
           try {
             const res = await downloadDataFromSupabase();
             if (res.success) {
-              console.log('[Supabase] Dados baixados com sucesso na inicialização. Pedidos:', res.pedidos || 0);
+              console.log('[Supabase] Dados baixados com sucesso na inicialização.');
               load();
               window.dispatchEvent(new Event('fortegado_db_update'));
             } else {
@@ -1753,9 +1755,23 @@
         <div className="app-container">
           <header>
             <div className="header-logo-container" onClick={() => setView('dashboard')} style={{ cursor: 'pointer' }}>
-              <span style={{ fontSize: '24px' }}>🐂</span>
+              {empresa.logotipo && empresa.logotipo.startsWith('data:') ? (
+                <img
+                  src={empresa.logotipo}
+                  alt="Logo"
+                  style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.3)' }}
+                />
+              ) : empresa.logotipo && empresa.logotipo.startsWith('http') ? (
+                <img
+                  src={empresa.logotipo}
+                  alt="Logo"
+                  style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.3)' }}
+                />
+              ) : (
+                <span style={{ fontSize: '24px' }}>{empresa.logotipo || '🐂'}</span>
+              )}
               <div className="header-title">
-                <h1>Forte Gado</h1>
+                <h1>{empresa.nome || 'Forte Gado'}</h1>
                 <span style={{ fontSize: '0.65rem', color: 'var(--amarelo-cta)', fontWeight: 'bold' }}>Vendas &amp; Estoque</span>
               </div>
             </div>
