@@ -101,7 +101,10 @@ async function syncCreateOrder(client, payload) {
     status: payload.pedido.status,
     total: payload.pedido.total
   });
-  if (errPed) return false;
+  if (errPed) {
+    console.error('[Supabase Sync] Erro ao criar pedido:', errPed);
+    return false;
+  }
 
   // 2. Inserir Itens
   const { error: errItens } = await client.from('itens_pedido').insert(
@@ -114,7 +117,10 @@ async function syncCreateOrder(client, payload) {
       desconto: it.desconto
     }))
   );
-  if (errItens) return false;
+  if (errItens) {
+    console.error('[Supabase Sync] Erro ao criar itens do pedido:', errItens);
+    return false;
+  }
 
   // 3. Inserir Parcelas
   const { error: errPar } = await client.from('parcelas').insert(
@@ -126,7 +132,10 @@ async function syncCreateOrder(client, payload) {
       pago: par.pago
     }))
   );
-  if (errPar) return false;
+  if (errPar) {
+    console.error('[Supabase Sync] Erro ao criar parcelas:', errPar);
+    return false;
+  }
 
   // 4. Inserir Assinatura
   const { error: errAss } = await client.from('assinaturas').insert({
@@ -134,7 +143,10 @@ async function syncCreateOrder(client, payload) {
     pedido_id: payload.assinatura.pedido_id,
     imagem: payload.assinatura.imagem
   });
-  if (errAss) return false;
+  if (errAss) {
+    console.error('[Supabase Sync] Erro ao criar assinatura no Supabase:', errAss);
+    return false;
+  }
 
   // 5. Inserir Localização
   const { error: errLoc } = await client.from('localizacoes').insert({
@@ -145,17 +157,25 @@ async function syncCreateOrder(client, payload) {
     longitude: payload.localizacao.longitude,
     data_hora: payload.localizacao.data_hora
   });
-  if (errLoc) return false;
+  if (errLoc) {
+    console.error('[Supabase Sync] Erro ao criar localização da venda:', errLoc);
+    return false;
+  }
 
   // 6. Atualizar estoque reservado
   for (const it of payload.estoqueUpdates) {
-    // Obter estoque atual do Supabase
-    const { data: estData } = await client.from('estoque').select('*').eq('produto_id', it.produto_id).single();
+    const { data: estData, error: errEstSel } = await client.from('estoque').select('*').eq('produto_id', it.produto_id).single();
+    if (errEstSel) {
+      console.error('[Supabase Sync] Erro ao consultar estoque para reserva:', errEstSel);
+    }
     if (estData) {
-      await client.from('estoque').update({
+      const { error: errEstUpd } = await client.from('estoque').update({
         quantidade_reservada: estData.quantidade_reservada + it.deltaReservado,
         updated_at: new Date().toISOString()
       }).eq('produto_id', it.produto_id);
+      if (errEstUpd) {
+        console.error('[Supabase Sync] Erro ao atualizar estoque reservado:', errEstUpd);
+      }
     }
   }
 
@@ -165,7 +185,10 @@ async function syncCreateOrder(client, payload) {
 async function syncConfirmDelivery(client, payload) {
   // 1. Atualizar Pedido
   const { error: errPed } = await client.from('pedidos').update({ status: 'Entregue' }).eq('id', payload.pedidoId);
-  if (errPed) return false;
+  if (errPed) {
+    console.error('[Supabase Sync] Erro ao atualizar status do pedido para entregue:', errPed);
+    return false;
+  }
 
   // 2. Inserir Foto da entrega
   const { error: errFoto } = await client.from('fotos_entrega').insert({
@@ -173,7 +196,10 @@ async function syncConfirmDelivery(client, payload) {
     pedido_id: payload.foto.pedido_id,
     imagem: payload.foto.imagem
   });
-  if (errFoto) return false;
+  if (errFoto) {
+    console.error('[Supabase Sync] Erro ao inserir foto da entrega no Supabase:', errFoto);
+    return false;
+  }
 
   // 3. Inserir Localização
   const { error: errLoc } = await client.from('localizacoes').insert({
@@ -184,17 +210,26 @@ async function syncConfirmDelivery(client, payload) {
     longitude: payload.localizacao.longitude,
     data_hora: payload.localizacao.data_hora
   });
-  if (errLoc) return false;
+  if (errLoc) {
+    console.error('[Supabase Sync] Erro ao criar localização da entrega:', errLoc);
+    return false;
+  }
 
   // 4. Atualizar Estoque (Debitar Reservado e Baixar Atual)
   for (const it of payload.estoqueUpdates) {
-    const { data: estData } = await client.from('estoque').select('*').eq('produto_id', it.produto_id).single();
+    const { data: estData, error: errEstSel } = await client.from('estoque').select('*').eq('produto_id', it.produto_id).single();
+    if (errEstSel) {
+      console.error('[Supabase Sync] Erro ao consultar estoque para baixa:', errEstSel);
+    }
     if (estData) {
-      await client.from('estoque').update({
+      const { error: errEstUpd } = await client.from('estoque').update({
         quantidade_reservada: Math.max(0, estData.quantidade_reservada - it.quantidade),
         quantidade_atual: Math.max(0, estData.quantidade_atual - it.quantidade),
         updated_at: new Date().toISOString()
       }).eq('produto_id', it.produto_id);
+      if (errEstUpd) {
+        console.error('[Supabase Sync] Erro ao atualizar estoque na entrega:', errEstUpd);
+      }
     }
   }
 
@@ -203,20 +238,28 @@ async function syncConfirmDelivery(client, payload) {
 
 async function syncCancelOrder(client, payload) {
   const { error: errPed } = await client.from('pedidos').update({ status: 'Cancelado' }).eq('id', payload.pedidoId);
-  if (errPed) return false;
+  if (errPed) {
+    console.error('[Supabase Sync] Erro ao atualizar status do pedido para cancelado:', errPed);
+    return false;
+  }
 
   // Se estava Emitido, libera o estoque reservado no Supabase
   if (payload.oldStatus === 'Emitido') {
-    // Buscar itens do pedido no Supabase
-    const { data: itens } = await client.from('itens_pedido').select('*').eq('pedido_id', payload.pedidoId);
+    const { data: itens, error: errItens } = await client.from('itens_pedido').select('*').eq('pedido_id', payload.pedidoId);
+    if (errItens) {
+      console.error('[Supabase Sync] Erro ao obter itens do pedido cancelado:', errItens);
+    }
     if (itens) {
       for (const it of itens) {
-        const { data: estData } = await client.from('estoque').select('*').eq('produto_id', it.produto_id).single();
+        const { data: estData, error: errEstSel } = await client.from('estoque').select('*').eq('produto_id', it.produto_id).single();
         if (estData) {
-          await client.from('estoque').update({
+          const { error: errEstUpd } = await client.from('estoque').update({
             quantidade_reservada: Math.max(0, estData.quantidade_reservada - it.quantidade),
             updated_at: new Date().toISOString()
           }).eq('produto_id', it.produto_id);
+          if (errEstUpd) {
+            console.error('[Supabase Sync] Erro ao liberar estoque de pedido cancelado:', errEstUpd);
+          }
         }
       }
     }
@@ -227,18 +270,27 @@ async function syncCancelOrder(client, payload) {
 
 async function syncReopenOrder(client, payload) {
   const { error: errPed } = await client.from('pedidos').update({ status: 'Emitido' }).eq('id', payload.pedidoId);
-  if (errPed) return false;
+  if (errPed) {
+    console.error('[Supabase Sync] Erro ao reabrir pedido:', errPed);
+    return false;
+  }
 
   // Reservar estoque novamente
-  const { data: itens } = await client.from('itens_pedido').select('*').eq('pedido_id', payload.pedidoId);
+  const { data: itens, error: errItens } = await client.from('itens_pedido').select('*').eq('pedido_id', payload.pedidoId);
+  if (errItens) {
+    console.error('[Supabase Sync] Erro ao obter itens para reabertura:', errItens);
+  }
   if (itens) {
     for (const it of itens) {
-      const { data: estData } = await client.from('estoque').select('*').eq('produto_id', it.produto_id).single();
+      const { data: estData, error: errEstSel } = await client.from('estoque').select('*').eq('produto_id', it.produto_id).single();
       if (estData) {
-        await client.from('estoque').update({
+        const { error: errEstUpd } = await client.from('estoque').update({
           quantidade_reservada: estData.quantidade_reservada + it.quantidade,
           updated_at: new Date().toISOString()
         }).eq('produto_id', it.produto_id);
+        if (errEstUpd) {
+          console.error('[Supabase Sync] Erro ao reservar estoque na reabertura:', errEstUpd);
+        }
       }
     }
   }
@@ -252,11 +304,17 @@ async function syncAdjustStock(client, payload) {
     estoque_minimo: payload.estoque_minimo,
     updated_at: new Date().toISOString()
   }).eq('produto_id', payload.produtoId);
+  if (error) {
+    console.error('[Supabase Sync] Erro ao ajustar estoque:', error);
+  }
   return !error;
 }
 
 async function syncReceiveInstallment(client, payload) {
   const { error } = await client.from('parcelas').update({ pago: true }).eq('id', payload.parcelaId);
+  if (error) {
+    console.error('[Supabase Sync] Erro ao registrar recebimento de parcela:', error);
+  }
   return !error;
 }
 
@@ -273,6 +331,9 @@ async function syncCreateClient(client, payload) {
     endereco: payload.endereco,
     cidade: payload.cidade
   });
+  if (error) {
+    console.error('[Supabase Sync] Erro ao criar cliente:', error);
+  }
   return !error;
 }
 
@@ -280,13 +341,18 @@ async function syncUpdateProductPrice(client, payload) {
   const { error } = await client.from('produtos').update({
     preco: payload.preco
   }).eq('id', payload.id);
+  if (error) {
+    console.error('[Supabase Sync] Erro ao atualizar preço do produto:', error);
+  }
   return !error;
 }
 
 async function syncUpdateProduct(client, payload) {
   const { id, ...updates } = payload;
-  // Apenas campos aceitos pelo Supabase (sem id)
   const { error } = await client.from('produtos').update(updates).eq('id', id);
+  if (error) {
+    console.error('[Supabase Sync] Erro ao atualizar dados do produto:', error);
+  }
   return !error;
 }
 
@@ -300,20 +366,28 @@ async function syncCreateProduct(client, payload) {
     imagem: payload.imagem || null,
     descricao: payload.descricao || null
   });
-  if (error) return false;
-  // Criar entrada de estoque zerada
-  await client.from('estoque').insert({
+  if (error) {
+    console.error('[Supabase Sync] Erro ao cadastrar produto:', error);
+    return false;
+  }
+  const { error: errEst } = await client.from('estoque').insert({
     produto_id: payload.id,
     quantidade_atual: 0,
     quantidade_reservada: 0,
     estoque_minimo: 5
   });
+  if (errEst) {
+    console.error('[Supabase Sync] Erro ao criar estoque inicial do produto:', errEst);
+  }
   return true;
 }
 
 async function syncUpdateCompany(client, payload) {
   const { id, ...updates } = payload;
   const { error } = await client.from('empresas').update(updates).eq('id', id);
+  if (error) {
+    console.error('[Supabase Sync] Erro ao atualizar empresa:', error);
+  }
   return !error;
 }
 

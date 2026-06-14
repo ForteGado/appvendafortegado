@@ -35,12 +35,51 @@ function ImageUploader({ value, onChange, size = 80, label = 'Imagem', shape = '
       alert('Por favor, selecione um arquivo de imagem.');
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      alert('Imagem muito grande. Máximo: 2MB.');
-      return;
+
+    try {
+      const compressedB64 = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+          const img = new Image();
+          img.src = event.target.result;
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+            const maxDimension = 600; // Resolução ideal para logos e produtos
+
+            if (width > height) {
+              if (width > maxDimension) {
+                height = Math.round((height * maxDimension) / width);
+                width = maxDimension;
+              }
+            } else {
+              if (height > maxDimension) {
+                width = Math.round((width * maxDimension) / height);
+                height = maxDimension;
+              }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            // Comprime e gera base64 otimizado
+            resolve(canvas.toDataURL('image/jpeg', 0.7));
+          };
+          img.onerror = () => resolve(event.target.result);
+        };
+        reader.onerror = () => resolve('');
+      });
+
+      onChange(compressedB64);
+    } catch (err) {
+      console.error('Erro ao processar imagem:', err);
+      const b64 = await fileToBase64(file);
+      onChange(b64);
     }
-    const b64 = await fileToBase64(file);
-    onChange(b64);
   };
 
   const isEmoji = value && !value.startsWith('data:');

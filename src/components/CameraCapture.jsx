@@ -5,18 +5,68 @@ export default function CameraCapture({ onCapture, onClear }) {
   const [preview, setPreview] = useState(null);
   const fileInputRef = useRef(null);
 
+  // Função para comprimir a imagem usando canvas antes de salvar e subir
+  const compressImage = (file, maxWidth = 800, maxHeight = 800, quality = 0.7) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxWidth) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            }
+          } else {
+            if (height > maxHeight) {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Comprime e exporta como JPEG
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+          resolve(compressedDataUrl);
+        };
+        img.onerror = () => {
+          resolve(event.target.result); // Fallback
+        };
+      };
+      reader.onerror = () => resolve('');
+    });
+  };
+
   // Manipular imagem selecionada da câmera
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target.result;
-      setPreview(dataUrl);
-      onCapture(dataUrl);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressedDataUrl = await compressImage(file);
+      setPreview(compressedDataUrl);
+      onCapture(compressedDataUrl);
+    } catch (err) {
+      console.error('Erro na compressão:', err);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target.result;
+        setPreview(dataUrl);
+        onCapture(dataUrl);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const triggerCamera = () => {
