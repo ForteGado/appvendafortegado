@@ -535,14 +535,26 @@ export async function saveCompanyToSupabase(empresaData) {
   const { id, ...fields } = empresaData;
   if (!id) return { success: false, reason: 'ID da empresa não encontrado.' };
 
-  if (fields.logotipo && (fields.logotipo.startsWith('data:') || fields.logotipo.length > 500)) {
-    const uploadedUrl = await uploadImageToSupabase(client, fields.logotipo, 'empresas', `logo_${id}`);
-    if (uploadedUrl) {
-      fields.logotipo = uploadedUrl;
+  // Tenta fazer upload para o Storage para obter URL pública
+  // Se falhar (sem bucket), salva o base64 diretamente na coluna logotipo
+  if (fields.logotipo && fields.logotipo.startsWith('data:')) {
+    console.log('[Supabase] Tentando enviar logo para Storage...');
+    try {
+      const uploadedUrl = await uploadImageToSupabase(client, fields.logotipo, 'empresas', `logo_${id}`);
+      if (uploadedUrl) {
+        console.log('[Supabase] Logo enviada para Storage:', uploadedUrl);
+        fields.logotipo = uploadedUrl;
+      } else {
+        console.warn('[Supabase] Storage indisponível. Salvando logo como base64 na coluna logotipo.');
+        // Mantém o base64 em fields.logotipo para salvar diretamente no banco
+      }
+    } catch (e) {
+      console.warn('[Supabase] Erro no Storage, salvando base64 direto:', e.message);
+      // Mantém o base64 em fields.logotipo
     }
   }
 
-  // Tenta UPDATE primeiro
+  // Tenta UPDATE primeiro, depois INSERT
   const { data: existing, error: fetchErr } = await client
     .from('empresas')
     .select('id')
@@ -551,22 +563,20 @@ export async function saveCompanyToSupabase(empresaData) {
 
   let error;
   if (!fetchErr && existing) {
-    // Atualiza registro existente
     ({ error } = await client.from('empresas').update(fields).eq('id', id));
   } else {
-    // Insere novo registro se não existir
     ({ error } = await client.from('empresas').insert({ id, ...fields }));
   }
 
   if (error) {
     console.error('[Supabase] Erro ao salvar empresa:', error);
-    // Verificar se é erro de coluna ausente
     if (error.message?.includes('column') || error.code === '42703') {
-      return { success: false, reason: `Coluna ausente no Supabase: ${error.message}. Execute o SQL de migração.` };
+      return { success: false, reason: `Coluna ausente no Supabase: ${error.message}. Execute o SQL de migração no Dashboard do Supabase.` };
     }
     return { success: false, reason: error.message };
   }
 
+  console.log('[Supabase] Empresa salva com sucesso! logotipo:', fields.logotipo?.substring(0, 60));
   return { success: true };
 }
 
@@ -579,10 +589,15 @@ export async function saveProductToSupabase(produtoData) {
   if (!client) return { success: false, reason: 'Supabase não configurado.' };
 
   let imagemUrl = produtoData.imagem || null;
-  if (imagemUrl && (imagemUrl.startsWith('data:') || imagemUrl.length > 500)) {
-    const uploadedUrl = await uploadImageToSupabase(client, imagemUrl, 'produtos', `prod_${produtoData.id}`);
-    if (uploadedUrl) {
-      imagemUrl = uploadedUrl;
+  if (imagemUrl && imagemUrl.startsWith('data:')) {
+    try {
+      const uploadedUrl = await uploadImageToSupabase(client, imagemUrl, 'produtos', `prod_${produtoData.id}`);
+      if (uploadedUrl) {
+        imagemUrl = uploadedUrl;
+      }
+      // Se uploadedUrl for null, mantém o base64 direto na coluna imagem
+    } catch (e) {
+      console.warn('[Supabase] Storage falhou para produto, salvando base64 direto:', e.message);
     }
   }
 
