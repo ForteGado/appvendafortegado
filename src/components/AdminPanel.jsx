@@ -7,9 +7,9 @@ import {
 } from 'lucide-react';
 import {
   getDb, saveDb,
-  updateProductPriceLocal, updateProductLocal, createProductLocal, addToSyncQueue
+  updateProductPriceLocal, updateProductLocal, createProductLocal, deleteProductLocal, addToSyncQueue
 } from '../services/db';
-import { saveCompanyToSupabase, saveProductToSupabase } from '../services/supabaseService';
+import { saveCompanyToSupabase, saveProductToSupabase, deleteProductFromSupabase, saveStockToSupabase } from '../services/supabaseService';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (v) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -150,7 +150,7 @@ function ProdutosTab() {
   const [editId, setEditId] = useState(null);
   const [editData, setEditData] = useState({});
   const [novoMode, setNovoMode] = useState(false);
-  const [novoProd, setNovoProd] = useState({ codigo: '', nome: '', unidade: 'Saco 25kg', preco: '', imagem: null, descricao: '' });
+  const [novoProd, setNovoProd] = useState({ codigo: '', nome: '', unidade: 'Saco 25kg', preco: '', imagem: null, descricao: '', quantidade_atual: '0', estoque_minimo: '5' });
   const [msg, setMsg] = useState(null);
 
   const reload = () => { const db = getDb(); setProdutos(db.produtos); };
@@ -160,22 +160,61 @@ function ProdutosTab() {
     return () => window.removeEventListener('fortegado_db_update', reload);
   }, []);
 
-  const startEdit = (p) => { setEditId(p.id); setEditData({ preco: String(p.preco), imagem: p.imagem || null, nome: p.nome, unidade: p.unidade, codigo: p.codigo, descricao: p.descricao || '' }); };
+  const startEdit = (p) => {
+    const db = getDb();
+    const est = db.estoque.find(e => e.produto_id === p.id) || { quantidade_atual: 0, estoque_minimo: 5 };
+    setEditId(p.id);
+    setEditData({
+      preco: String(p.preco),
+      imagem: p.imagem || null,
+      nome: p.nome,
+      unidade: p.unidade,
+      codigo: p.codigo,
+      descricao: p.descricao || '',
+      quantidade_atual: String(est.quantidade_atual),
+      estoque_minimo: String(est.estoque_minimo)
+    });
+  };
+  
   const cancelEdit = () => { setEditId(null); setEditData({}); };
 
   const saveEdit = async (id) => {
     const val = parseFloat(String(editData.preco).replace(',', '.'));
     if (isNaN(val) || val < 0) { setMsg({ ok: false, text: 'Preço inválido.' }); return; }
-    const updated = updateProductLocal(id, { ...editData, preco: val });
+
+    const qty = parseInt(String(editData.quantidade_atual), 10);
+    const min = parseInt(String(editData.estoque_minimo), 10);
+    if (isNaN(qty) || qty < 0) { setMsg({ ok: false, text: 'Quantidade de estoque inválida.' }); return; }
+    if (isNaN(min) || min < 0) { setMsg({ ok: false, text: 'Estoque mínimo inválido.' }); return; }
+
+    const { quantidade_atual, estoque_minimo, ...productUpdates } = editData;
+
+    // Atualizar produto local
+    const updated = updateProductLocal(id, { ...productUpdates, preco: val });
+    
+    // Atualizar estoque local
+    const db = getDb();
+    const estIdx = db.estoque.findIndex(e => e.produto_id === id);
+    if (estIdx > -1) {
+      db.estoque[estIdx].quantidade_atual = qty;
+      db.estoque[estIdx].estoque_minimo = min;
+      saveDb(db);
+    }
+    
+    // Fila offline para ajuste de estoque
+    addToSyncQueue('ADJUST_STOCK', { produtoId: id, quantidade_atual: qty, estoque_minimo: min });
+
     setEditId(null);
     reload();
+
     // Sincronizar diretamente com Supabase
     if (updated) {
       const res = await saveProductToSupabase(updated);
-      if (res.success) {
-        setMsg({ ok: true, text: '✅ Produto atualizado e sincronizado com Supabase!' });
+      const resStock = await saveStockToSupabase(id, qty, min);
+      if (res.success && resStock.success) {
+        setMsg({ ok: true, text: '✅ Produto e estoque atualizados e sincronizados com Supabase!' });
       } else {
-        setMsg({ ok: false, text: `⚠️ Salvo localmente. Erro Supabase: ${res.reason}` });
+        setMsg({ ok: false, text: `⚠️ Salvo localmente. Erro Supabase: ${res.reason || ''} ${resStock.reason || ''}` });
       }
     } else {
       setMsg({ ok: true, text: 'Produto atualizado localmente.' });
@@ -187,16 +226,41 @@ function ProdutosTab() {
     if (!novoProd.nome) { setMsg({ ok: false, text: 'Nome do produto é obrigatório.' }); return; }
     const val = parseFloat(String(novoProd.preco).replace(',', '.'));
     if (isNaN(val) || val < 0) { setMsg({ ok: false, text: 'Preço inválido.' }); return; }
-    const created = createProductLocal({ ...novoProd, preco: val });
+
+    const qty = parseInt(String(novoProd.quantidade_atual), 10);
+    const min = parseInt(String(novoProd.estoque_minimo), 10);
+    if (isNaN(qty) || qty < 0) { setMsg({ ok: false, text: 'Quantidade de estoque inválida.' }); return; }
+    if (isNaN(min) || min < 0) { setMsg({ ok: false, text: 'Estoque mínimo inválido.' }); return; }
+
+    const created = createProductLocal({ ...novoProd, preco: val, quantidade_atual: qty, estoque_minimo: min });
     setNovoMode(false);
-    setNovoProd({ codigo: '', nome: '', unidade: 'Saco 25kg', preco: '', imagem: null, descricao: '' });
+    setNovoProd({ codigo: '', nome: '', unidade: 'Saco 25kg', preco: '', imagem: null, descricao: '', quantidade_atual: '0', estoque_minimo: '5' });
     reload();
+
     // Sincronizar diretamente com Supabase
     const res = await saveProductToSupabase(created);
-    if (res.success) {
+    const resStock = await saveStockToSupabase(created.id, qty, min);
+    if (res.success && resStock.success) {
       setMsg({ ok: true, text: '✅ Produto cadastrado e sincronizado com Supabase!' });
     } else {
-      setMsg({ ok: false, text: `⚠️ Produto salvo localmente. Erro Supabase: ${res.reason}` });
+      setMsg({ ok: false, text: `⚠️ Produto salvo localmente. Erro Supabase: ${res.reason || ''} ${resStock.reason || ''}` });
+    }
+    setTimeout(() => setMsg(null), 5000);
+  };
+
+  const handleDeleteProduct = async (id) => {
+    if (!window.confirm('Tem certeza de que deseja excluir este produto? Isso também removerá o estoque do mesmo.')) {
+      return;
+    }
+    deleteProductLocal(id);
+    reload();
+    setMsg({ ok: true, text: 'Produto removido localmente. Sincronizando com Supabase...' });
+
+    const res = await deleteProductFromSupabase(id);
+    if (res.success) {
+      setMsg({ ok: true, text: '✅ Produto removido localmente e do Supabase com sucesso!' });
+    } else {
+      setMsg({ ok: false, text: `⚠️ Removido localmente. Falha ao excluir do Supabase: ${res.reason}. A exclusão está na fila offline.` });
     }
     setTimeout(() => setMsg(null), 5000);
   };
@@ -209,12 +273,16 @@ function ProdutosTab() {
 
       {/* Lista de Produtos */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
-        {produtos.map((p) => (
-          <div key={p.id} style={{
-            backgroundColor: editId === p.id ? 'rgba(22,101,184,0.04)' : 'var(--cinza-ultra-claro)',
-            border: editId === p.id ? '1.5px solid var(--azul-principal)' : '1px solid var(--cinza-claro)',
-            borderRadius: '10px', padding: '12px', transition: 'all 0.2s'
-          }}>
+        {produtos.map((p) => {
+          const db = getDb();
+          const est = db.estoque.find(e => e.produto_id === p.id) || { quantidade_atual: 0, quantidade_reservada: 0, estoque_minimo: 5 };
+          const disponivel = est.quantidade_atual - est.quantidade_reservada;
+          return (
+            <div key={p.id} style={{
+              backgroundColor: editId === p.id ? 'rgba(22,101,184,0.04)' : 'var(--cinza-ultra-claro)',
+              border: editId === p.id ? '1.5px solid var(--azul-principal)' : '1px solid var(--cinza-claro)',
+              borderRadius: '10px', padding: '12px', transition: 'all 0.2s'
+            }}>
             {editId === p.id ? (
               /* Modo edição */
               <div>
@@ -247,6 +315,14 @@ function ProdutosTab() {
                       <label style={{ fontSize: '0.75rem' }}>Descrição</label>
                       <input className="form-control" style={inputSm} value={editData.descricao} onChange={e => setEditData({ ...editData, descricao: e.target.value })} placeholder="Opcional" />
                     </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label style={{ fontSize: '0.75rem' }}>Estoque Físico</label>
+                      <input type="number" className="form-control" style={inputSm} value={editData.quantidade_atual} onChange={e => setEditData({ ...editData, quantidade_atual: e.target.value })} />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label style={{ fontSize: '0.75rem' }}>Estoque Mínimo</label>
+                      <input type="number" className="form-control" style={inputSm} value={editData.estoque_minimo} onChange={e => setEditData({ ...editData, estoque_minimo: e.target.value })} />
+                    </div>
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -276,17 +352,21 @@ function ProdutosTab() {
                   <div style={{ fontSize: '0.72rem', color: 'var(--cinza-medio)', marginTop: '2px' }}>
                     <code style={{ backgroundColor: 'rgba(0,0,0,0.05)', padding: '1px 5px', borderRadius: '4px' }}>{p.codigo}</code>
                     {' · '}{p.unidade}
+                    {' · '}Estoque: <strong style={{ color: disponivel <= est.estoque_minimo ? 'var(--vermelho-cancelar)' : 'var(--verde-escuro)' }}>{disponivel}</strong>
                   </div>
                   {p.descricao && <div style={{ fontSize: '0.72rem', color: 'var(--cinza-medio)', marginTop: '2px' }}>{p.descricao}</div>}
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
                   <div style={{ fontSize: '1.05rem', fontWeight: '800', color: 'var(--verde-escuro)' }}>{fmt(p.preco)}</div>
-                  <button onClick={() => startEdit(p)} style={{ ...btnEdit, marginTop: '6px' }}><Edit3 size={12} /> Editar</button>
+                  <div style={{ display: 'flex', gap: '4px', marginTop: '6px', justifyContent: 'flex-end' }}>
+                    <button onClick={() => startEdit(p)} style={btnEdit}><Edit3 size={12} /> Editar</button>
+                    <button onClick={() => handleDeleteProduct(p.id)} style={btnDanger}><Trash2 size={12} /> Excluir</button>
+                  </div>
                 </div>
               </div>
             )}
           </div>
-        ))}
+        )})}
       </div>
 
       {/* Formulário Novo Produto */}
@@ -331,6 +411,14 @@ function ProdutosTab() {
               <div className="form-group">
                 <label>Descrição</label>
                 <input className="form-control" value={novoProd.descricao} onChange={e => setNovoProd({ ...novoProd, descricao: e.target.value })} placeholder="Opcional" />
+              </div>
+              <div className="form-group">
+                <label>Estoque Físico Inicial</label>
+                <input type="number" className="form-control" value={novoProd.quantidade_atual} onChange={e => setNovoProd({ ...novoProd, quantidade_atual: e.target.value })} placeholder="Ex: 100" />
+              </div>
+              <div className="form-group">
+                <label>Estoque Mínimo (Alerta)</label>
+                <input type="number" className="form-control" value={novoProd.estoque_minimo} onChange={e => setNovoProd({ ...novoProd, estoque_minimo: e.target.value })} placeholder="Ex: 5" />
               </div>
             </div>
           </div>

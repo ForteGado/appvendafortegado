@@ -36,6 +36,7 @@ export default function StockManager() {
         codigo: prod.codigo || 'N/A',
         unidade: prod.unidade || 'un',
         preco: prod.preco || 0,
+        imagem: prod.imagem || null,
         disponivel,
         status
       };
@@ -111,8 +112,25 @@ export default function StockManager() {
             {stockList.map(item => (
               <tr key={item.id}>
                 <td>
-                  <div style={{ fontWeight: '600' }}>{item.nome}</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--cinza-medio)' }}>Cód: {item.codigo} | {item.unidade}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{
+                      width: '32px', height: '32px', borderRadius: '4px', flexShrink: 0,
+                      backgroundColor: 'white', border: '1px solid var(--cinza-claro)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      overflow: 'hidden', fontSize: '1rem'
+                    }}>
+                      {item.imagem
+                        ? (item.imagem.startsWith('data:')
+                          ? <img src={item.imagem} alt={item.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : <span>{item.imagem}</span>)
+                        : <Package size={16} color="var(--cinza-medio)" />
+                      }
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: '600' }}>{item.nome}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--cinza-medio)' }}>Cód: {item.codigo} | {item.unidade}</div>
+                    </div>
+                  </div>
                 </td>
                 <td className="text-right" style={{ fontWeight: 'bold' }}>{item.quantidade_atual}</td>
                 <td className="text-right" style={{ color: 'var(--cinza-medio)' }}>{item.quantidade_reservada}</td>

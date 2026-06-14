@@ -71,6 +71,8 @@ export async function syncQueueToSupabase() {
         result = await syncUpdateProduct(client, payload);
       } else if (actionType === 'CREATE_PRODUCT') {
         result = await syncCreateProduct(client, payload);
+      } else if (actionType === 'DELETE_PRODUCT') {
+        result = await syncDeleteProduct(client, payload);
       } else if (actionType === 'UPDATE_COMPANY') {
         result = await syncUpdateCompany(client, payload);
       } else {
@@ -398,12 +400,22 @@ async function syncCreateProduct(client, payload) {
   }
   const { error: errEst } = await client.from('estoque').insert({
     produto_id: payload.id,
-    quantidade_atual: 0,
+    quantidade_atual: Number(payload.quantidade_atual) || 0,
     quantidade_reservada: 0,
-    estoque_minimo: 5
+    estoque_minimo: Number(payload.estoque_minimo) || 5
   });
   if (errEst) {
     console.error('[Supabase Sync] Erro ao criar estoque inicial do produto:', errEst);
+  }
+  return { success: true };
+}
+
+async function syncDeleteProduct(client, payload) {
+  const { id } = payload;
+  const { error } = await client.from('produtos').delete().eq('id', Number(id));
+  if (error) {
+    console.error('[Supabase Sync] Erro ao deletar produto:', error);
+    return { success: false, error };
   }
   return { success: true };
 }
@@ -579,4 +591,50 @@ export async function downloadDataFromSupabase() {
     console.error('[Supabase Download Error]', err);
     return { success: false, reason: err.message || JSON.stringify(err) };
   }
+}
+
+export async function deleteProductFromSupabase(id) {
+  const client = getSupabaseClient();
+  if (!client) return { success: false, reason: 'Supabase não configurado.' };
+
+  const { error } = await client.from('produtos').delete().eq('id', Number(id));
+  if (error) {
+    console.error('[Supabase] Erro ao deletar produto:', error);
+    return { success: false, reason: error.message };
+  }
+  return { success: true };
+}
+
+export async function saveStockToSupabase(produtoId, quantidadeAtual, estoqueMinimo) {
+  const client = getSupabaseClient();
+  if (!client) return { success: false, reason: 'Supabase não configurado.' };
+
+  const { data: estData, error: estErr } = await client
+    .from('estoque')
+    .select('id')
+    .eq('produto_id', Number(produtoId))
+    .maybeSingle();
+
+  let error;
+  if (!estErr && estData) {
+    ({ error } = await client.from('estoque').update({
+      quantidade_atual: Number(quantidadeAtual),
+      estoque_minimo: Number(estoqueMinimo),
+      updated_at: new Date().toISOString()
+    }).eq('produto_id', Number(produtoId)));
+  } else {
+    ({ error } = await client.from('estoque').insert({
+      produto_id: Number(produtoId),
+      quantidade_atual: Number(quantidadeAtual),
+      quantidade_reservada: 0,
+      estoque_minimo: Number(estoqueMinimo),
+      updated_at: new Date().toISOString()
+    }));
+  }
+
+  if (error) {
+    console.error('[Supabase] Erro ao salvar estoque:', error);
+    return { success: false, reason: error.message };
+  }
+  return { success: true };
 }

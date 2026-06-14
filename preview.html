@@ -1210,7 +1210,7 @@
         const resolved = db.estoque.map(e => {
           const p = db.produtos.find(pr => pr.id === e.produto_id) || {};
           const disp = e.quantidade_atual - e.quantidade_reservada;
-          return { ...e, nome: p.nome, codigo: p.codigo, disponivel: disp };
+          return { ...e, nome: p.nome, codigo: p.codigo, imagem: p.imagem || null, disponivel: disp };
         });
         setList(resolved);
       };
@@ -1239,7 +1239,26 @@
               <tbody>
                 {list.map(it => (
                   <tr key={it.id}>
-                    <td><strong>{it.nome}</strong><br/><small>{it.codigo}</small></td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{
+                          width: '32px', height: '32px', borderRadius: '4px', flexShrink: 0,
+                          backgroundColor: 'white', border: '1px solid #E2E8F0',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          overflow: 'hidden', fontSize: '1rem'
+                        }}>
+                          {it.imagem
+                            ? (it.imagem.startsWith('data:')
+                              ? <img src={it.imagem} alt={it.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              : <span>{it.imagem}</span>)
+                            : '📦'
+                          }
+                        </div>
+                        <div>
+                          <strong>{it.nome}</strong><br/><small>{it.codigo}</small>
+                        </div>
+                      </div>
+                    </td>
                     <td>{it.quantidade_atual}</td>
                     <td>{it.quantidade_reservada}</td>
                     <td style={{ color: it.disponivel <= it.estoque_minimo ? 'red' : 'green', fontWeight: 'bold' }}>{it.disponivel}</td>
@@ -1614,8 +1633,23 @@
                     const est = stock.find(e => e.produto_id === p.id) || {};
                     const disp = est.quantidade_atual - est.quantidade_reservada;
                     return (
-                      <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px', background: '#F8FAFC' }}>
-                        <span>{p.nome} (R$ {p.preco}) | Disp: {disp}</span>
+                      <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px', background: '#F8FAFC' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{
+                            width: '32px', height: '32px', borderRadius: '4px', flexShrink: 0,
+                            backgroundColor: 'white', border: '1px solid #E2E8F0',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            overflow: 'hidden', fontSize: '1rem'
+                          }}>
+                            {p.imagem
+                              ? (p.imagem.startsWith('data:')
+                                ? <img src={p.imagem} alt={p.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                : <span>{p.imagem}</span>)
+                              : '📦'
+                            }
+                          </div>
+                          <span>{p.nome} (R$ {p.preco}) | Disp: {disp}</span>
+                        </div>
                         <button className="btn btn-primary" onClick={()=>addProduct(p)} style={{ width: 'auto', padding: '2px 8px' }}>Add</button>
                       </div>
                     );
@@ -1627,11 +1661,26 @@
                 {cart.map(c => {
                   const p = products.find(pr => pr.id === c.produto_id) || {};
                   return (
-                    <div key={c.produto_id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px' }}>
-                      <span>{p.nome}</span>
+                    <div key={c.produto_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{
+                          width: '28px', height: '28px', borderRadius: '4px', flexShrink: 0,
+                          backgroundColor: 'white', border: '1px solid #E2E8F0',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          overflow: 'hidden', fontSize: '0.9rem'
+                        }}>
+                          {p.imagem
+                            ? (p.imagem.startsWith('data:')
+                              ? <img src={p.imagem} alt={p.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              : <span>{p.imagem}</span>)
+                            : '📦'
+                          }
+                        </div>
+                        <span>{p.nome}</span>
+                      </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <button className="btn btn-secondary" onClick={()=>setQty(c.produto_id, -1)} style={{ width: 'auto', padding: '2px 6px' }}>-</button>
-                        <span>{c.shadow || c.quantidade}</span>
+                        <span>{c.quantidade}</span>
                         <button className="btn btn-secondary" onClick={()=>setQty(c.produto_id, 1)} style={{ width: 'auto', padding: '2px 6px' }}>+</button>
                       </div>
                     </div>

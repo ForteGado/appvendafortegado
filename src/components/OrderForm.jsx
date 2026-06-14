@@ -640,10 +640,26 @@ export default function OrderForm({ setView }) {
                     borderRadius: '8px',
                     fontSize: '0.85rem'
                   }}>
-                    <div>
-                      <strong>{prod.nome}</strong>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--cinza-medio)' }}>
-                        Cód: {prod.codigo} | Valor: R$ {prod.preco.toFixed(2)} | Estoque Disponível: <strong style={{ color: disponivel <= est.estoque_minimo ? 'var(--vermelho-cancelar)' : 'var(--verde-escuro)' }}>{disponivel}</strong>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      {/* Imagem do Produto */}
+                      <div style={{
+                        width: '36px', height: '36px', borderRadius: '6px', flexShrink: 0,
+                        backgroundColor: 'white', border: '1px solid var(--cinza-claro)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        overflow: 'hidden', fontSize: '1.2rem'
+                      }}>
+                        {prod.imagem
+                          ? (prod.imagem.startsWith('data:')
+                            ? <img src={prod.imagem} alt={prod.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            : <span>{prod.imagem}</span>)
+                          : <ShoppingBag size={18} color="var(--cinza-medio)" />
+                        }
+                      </div>
+                      <div>
+                        <strong>{prod.nome}</strong>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--cinza-medio)' }}>
+                          Cód: {prod.codigo} | Valor: R$ {prod.preco.toFixed(2)} | Estoque Disponível: <strong style={{ color: disponivel <= est.estoque_minimo ? 'var(--vermelho-cancelar)' : 'var(--verde-escuro)' }}>{disponivel}</strong>
+                        </div>
                       </div>
                     </div>
                     <button
@@ -672,9 +688,24 @@ export default function OrderForm({ setView }) {
                     const prod = dbProducts.find(p => p.id === item.produto_id) || {};
                     return (
                       <div key={item.produto_id} className="cart-item">
-                        <div className="cart-item-details">
-                          <span className="cart-item-name">{prod.nome}</span>
-                          <span className="cart-item-meta">R$ {prod.preco.toFixed(2)} / {prod.unidade}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{
+                            width: '32px', height: '32px', borderRadius: '4px', flexShrink: 0,
+                            backgroundColor: 'white', border: '1px solid var(--cinza-claro)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            overflow: 'hidden', fontSize: '1rem'
+                          }}>
+                            {prod.imagem
+                              ? (prod.imagem.startsWith('data:')
+                                ? <img src={prod.imagem} alt={prod.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                : <span>{prod.imagem}</span>)
+                              : <ShoppingBag size={14} color="var(--cinza-medio)" />
+                            }
+                          </div>
+                          <div className="cart-item-details">
+                            <span className="cart-item-name">{prod.nome}</span>
+                            <span className="cart-item-meta">R$ {prod.preco.toFixed(2)} / {prod.unidade}</span>
+                          </div>
                         </div>
                         <div className="cart-item-controls">
                           {/* Desconto */}

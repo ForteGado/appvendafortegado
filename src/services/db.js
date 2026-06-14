@@ -522,10 +522,36 @@ export function createProductLocal(productData) {
     descricao: productData.descricao || ''
   };
   db.produtos.push(newProduct);
-  // Criar entrada de estoque zerada
+  
+  // Criar entrada de estoque com valores iniciais informados ou padrão
   const nextEstId = db.estoque.length > 0 ? Math.max(...db.estoque.map(e => e.id)) + 1 : 1;
-  db.estoque.push({ id: nextEstId, produto_id: nextId, quantidade_atual: 0, quantidade_reservada: 0, estoque_minimo: 5 });
+  const qty = Number(productData.quantidade_atual) || 0;
+  const min = Number(productData.estoque_minimo) || 5;
+  db.estoque.push({
+    id: nextEstId,
+    produto_id: nextId,
+    quantidade_atual: qty,
+    quantidade_reservada: 0,
+    estoque_minimo: min
+  });
+  
   saveDb(db);
-  addToSyncQueue('CREATE_PRODUCT', newProduct);
+  addToSyncQueue('CREATE_PRODUCT', {
+    ...newProduct,
+    quantidade_atual: qty,
+    estoque_minimo: min
+  });
   return newProduct;
 }
+
+// Excluir Produto (Apenas Administrador)
+export function deleteProductLocal(id) {
+  const db = getDb();
+  const prodId = Number(id);
+  db.produtos = db.produtos.filter(p => p.id !== prodId);
+  db.estoque = db.estoque.filter(e => e.produto_id !== prodId);
+  saveDb(db);
+  addToSyncQueue('DELETE_PRODUCT', { id: prodId });
+  return true;
+}
+
