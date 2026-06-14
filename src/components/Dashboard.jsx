@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ShoppingBag, Truck, Package, DollarSign, Settings, BarChart2, TrendingUp, AlertTriangle } from 'lucide-react';
-import { getDb, getCredentials } from '../services/db';
+import { getDb, getCredentials, getLocalDateString } from '../services/db';
 
 export default function Dashboard({ setView }) {
   const [metrics, setMetrics] = useState({
@@ -22,9 +22,9 @@ export default function Dashboard({ setView }) {
     setCurrentUser(user);
 
     // Vendas hoje (emissão hoje)
-    const hojeStr = new Date().toISOString().split('T')[0];
+    const hojeStr = getLocalDateString(new Date());
     const pedidosHoje = db.pedidos.filter(p => {
-      const pedDataStr = p.data.split('T')[0];
+      const pedDataStr = getLocalDateString(new Date(p.data));
       const matchesUser = user.perfil === 'Administrador' || p.vendedor_id === user.id;
       return pedDataStr === hojeStr && p.status !== 'Cancelado' && matchesUser;
     });

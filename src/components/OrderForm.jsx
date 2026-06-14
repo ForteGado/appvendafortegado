@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ShoppingBag, User, Tag, CreditCard, PenTool, CheckCircle, Plus, Minus, Trash2, MapPin, RefreshCw, Send, FileText } from 'lucide-react';
-import { getDb, getCredentials, createOrderLocal, createClientLocal } from '../services/db';
+import { getDb, getCredentials, createOrderLocal, createClientLocal, getLocalDateString } from '../services/db';
 import CanvasSignature from './CanvasSignature';
 import { printOrderPDF } from '../services/pdfGenerator';
 
@@ -68,7 +68,7 @@ export default function OrderForm({ setView }) {
 
     if (paymentCond === 'À vista') {
       computed.push({
-        vencimento: today.toISOString().split('T')[0],
+        vencimento: getLocalDateString(today),
         valor: orderTotal
       });
       setIsCustomInstallments(false);
@@ -78,7 +78,7 @@ export default function OrderForm({ setView }) {
         const due = new Date();
         due.setDate(today.getDate() + Number(customDays));
         computed.push({
-          vencimento: due.toISOString().split('T')[0],
+          vencimento: getLocalDateString(due),
           valor: orderTotal
         });
       } else {
@@ -87,7 +87,7 @@ export default function OrderForm({ setView }) {
         const due = new Date();
         due.setDate(today.getDate() + days);
         computed.push({
-          vencimento: due.toISOString().split('T')[0],
+          vencimento: getLocalDateString(due),
           valor: orderTotal
         });
       }
@@ -100,7 +100,7 @@ export default function OrderForm({ setView }) {
           const due = new Date();
           due.setDate(today.getDate() + (30 * i));
           computed.push({
-            vencimento: due.toISOString().split('T')[0],
+            vencimento: getLocalDateString(due),
             valor: Number(val.toFixed(2))
           });
         }
@@ -114,7 +114,7 @@ export default function OrderForm({ setView }) {
             const due = new Date();
             due.setDate(today.getDate() + days);
             computed.push({
-              vencimento: due.toISOString().split('T')[0],
+              vencimento: getLocalDateString(due),
               valor: Number(val.toFixed(2))
             });
           });

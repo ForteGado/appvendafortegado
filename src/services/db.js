@@ -72,14 +72,113 @@ const INITIAL_DATA = {
   ]
 };
 
+// Obter string de data local no formato YYYY-MM-DD
+export function getLocalDateString(dateObj = new Date()) {
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const day = String(dateObj.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+// Ajustar as datas dos dados mockados para serem relativas ao dia de hoje (evitando que o painel mostre zerado no teste)
+function adjustMockDates(db) {
+  let changed = false;
+  const today = new Date();
+  const todayStr = getLocalDateString(today);
+  
+  const twoDaysAgo = new Date(today);
+  twoDaysAgo.setDate(today.getDate() - 2);
+  const twoDaysAgoStr = getLocalDateString(twoDaysAgo);
+
+  if (db.pedidos) {
+    db.pedidos.forEach(p => {
+      if (p.id === 1001 && !p.data.startsWith(twoDaysAgoStr)) {
+        p.data = `${twoDaysAgoStr}T10:00:00Z`;
+        changed = true;
+      }
+      if (p.id === 1002 && !p.data.startsWith(todayStr)) {
+        p.data = `${todayStr}T09:15:00Z`;
+        changed = true;
+      }
+      if (p.id === 1003 && !p.data.startsWith(todayStr)) {
+        p.data = `${todayStr}T11:30:00Z`;
+        changed = true;
+      }
+    });
+  }
+
+  if (db.parcelas) {
+    db.parcelas.forEach(par => {
+      if (par.pedido_id === 1001 && par.vencimento === '2026-07-12') {
+        const d = new Date(today);
+        d.setDate(today.getDate() - 2 + 30);
+        par.vencimento = getLocalDateString(d);
+        changed = true;
+      }
+      if (par.pedido_id === 1001 && par.vencimento === '2026-08-12') {
+        const d = new Date(today);
+        d.setDate(today.getDate() - 2 + 60);
+        par.vencimento = getLocalDateString(d);
+        changed = true;
+      }
+      if (par.pedido_id === 1002 && par.vencimento === '2026-06-13') {
+        par.vencimento = todayStr;
+        changed = true;
+      }
+      if (par.pedido_id === 1002 && par.vencimento === '2026-07-13') {
+        const d = new Date(today);
+        d.setDate(today.getDate() + 30);
+        par.vencimento = getLocalDateString(d);
+        changed = true;
+      }
+      if (par.pedido_id === 1003 && par.vencimento === '2026-07-13') {
+        const d = new Date(today);
+        d.setDate(today.getDate() + 30);
+        par.vencimento = getLocalDateString(d);
+        changed = true;
+      }
+    });
+  }
+
+  if (db.localizacoes) {
+    db.localizacoes.forEach(loc => {
+      if (loc.pedido_id === 1001 && loc.tipo === 'venda' && !loc.data_hora.startsWith(twoDaysAgoStr)) {
+        loc.data_hora = `${twoDaysAgoStr}T10:00:00Z`;
+        changed = true;
+      }
+      if (loc.pedido_id === 1001 && loc.tipo === 'entrega' && !loc.data_hora.startsWith(twoDaysAgoStr)) {
+        loc.data_hora = `${twoDaysAgoStr}T14:30:00Z`;
+        changed = true;
+      }
+      if (loc.pedido_id === 1002 && loc.tipo === 'venda' && !loc.data_hora.startsWith(todayStr)) {
+        loc.data_hora = `${todayStr}T09:15:00Z`;
+        changed = true;
+      }
+      if (loc.pedido_id === 1003 && loc.tipo === 'venda' && !loc.data_hora.startsWith(todayStr)) {
+        loc.data_hora = `${todayStr}T11:30:00Z`;
+        changed = true;
+      }
+    });
+  }
+
+  return changed;
+}
+
 // Obter banco de dados atual
 export function getDb() {
   const data = localStorage.getItem(LOCAL_STORAGE_KEY);
+  let db;
   if (!data) {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(INITIAL_DATA));
-    return INITIAL_DATA;
+    db = JSON.parse(JSON.stringify(INITIAL_DATA));
+    adjustMockDates(db);
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(db));
+    return db;
   }
-  return JSON.parse(data);
+  db = JSON.parse(data);
+  if (adjustMockDates(db)) {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(db));
+  }
+  return db;
 }
 
 // Salvar alterações
@@ -91,7 +190,9 @@ export function saveDb(data) {
 
 // Resetar para valores padrão
 export function resetDb() {
-  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(INITIAL_DATA));
+  const db = JSON.parse(JSON.stringify(INITIAL_DATA));
+  adjustMockDates(db);
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(db));
   window.dispatchEvent(new Event('fortegado_db_update'));
 }
 

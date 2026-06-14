@@ -20,7 +20,7 @@ export default function OfflineIndicator() {
     // Monitorar conexao
     const handleOnline = () => {
       const creds = getCredentials();
-      setIsOnline(!creds.simulateOffline);
+      setIsOnline(navigator.onLine && !creds.simulateOffline);
     };
     const handleOffline = () => setIsOnline(false);
 
@@ -47,18 +47,21 @@ export default function OfflineIndicator() {
 
     try {
       const creds = getCredentials();
+      const queueBefore = getSyncQueue(); // Copia da fila antes do Supabase processar e limpar os itens
       
       // 1. Sincronizar com Supabase
       const supResult = await syncQueueToSupabase();
       
-      // 2. Sincronizar itens pendentes individuais com o Google Sheets
-      // (Para fins desta demo, os itens da fila local também podem ser sincronizados com o Sheets)
-      const queue = getSyncQueue();
-      let sheetsSuccessCount = 0;
+      // 2. Sincronizar com o Google Sheets somente os itens que foram processados com sucesso no Supabase
+      const queueAfter = getSyncQueue();
+      const processedItems = queueBefore.filter(itemBefore => 
+        !queueAfter.some(itemAfter => itemAfter.id === itemBefore.id)
+      );
 
-      if (creds.googleSheetsUrl && queue.length > 0) {
-        // Envia as ações pendentes para o Google Sheets
-        for (const item of queue) {
+      let sheetsSuccessCount = 0;
+      if (creds.googleSheetsUrl && processedItems.length > 0) {
+        // Envia as ações processadas com sucesso para o Google Sheets
+        for (const item of processedItems) {
           const res = await syncToGoogleSheets(item.actionType, item.payload);
           if (res && res.success) {
             sheetsSuccessCount++;
@@ -83,6 +86,14 @@ export default function OfflineIndicator() {
       setTimeout(() => setSyncResult(null), 5000);
     }
   };
+
+  // Efeito para sincronização automática quando estiver online e houver itens pendentes
+  useEffect(() => {
+    if (isOnline && queueCount > 0 && !syncing) {
+      console.log('[Auto-Sync] Iniciando sincronização automática de itens pendentes.');
+      handleSync();
+    }
+  }, [isOnline, queueCount, syncing]);
 
   return (
     <div style={{ margin: '0 0 16px 0' }}>

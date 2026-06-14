@@ -133,13 +133,110 @@
       ]
     };
 
+    function getLocalDateString(dateObj = new Date()) {
+      const year = dateObj.getFullYear();
+      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const day = String(dateObj.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    function adjustMockDates(db) {
+      let changed = false;
+      const today = new Date();
+      const todayStr = getLocalDateString(today);
+      
+      const twoDaysAgo = new Date(today);
+      twoDaysAgo.setDate(today.getDate() - 2);
+      const twoDaysAgoStr = getLocalDateString(twoDaysAgo);
+
+      if (db.pedidos) {
+        db.pedidos.forEach(p => {
+          if (p.id === 1001 && !p.data.startsWith(twoDaysAgoStr)) {
+            p.data = `${twoDaysAgoStr}T10:00:00Z`;
+            changed = true;
+          }
+          if (p.id === 1002 && !p.data.startsWith(todayStr)) {
+            p.data = `${todayStr}T09:15:00Z`;
+            changed = true;
+          }
+          if (p.id === 1003 && !p.data.startsWith(todayStr)) {
+            p.data = `${todayStr}T11:30:00Z`;
+            changed = true;
+          }
+        });
+      }
+
+      if (db.parcelas) {
+        db.parcelas.forEach(par => {
+          if (par.pedido_id === 1001 && par.vencimento === '2026-07-12') {
+            const d = new Date(today);
+            d.setDate(today.getDate() - 2 + 30);
+            par.vencimento = getLocalDateString(d);
+            changed = true;
+          }
+          if (par.pedido_id === 1001 && par.vencimento === '2026-08-12') {
+            const d = new Date(today);
+            d.setDate(today.getDate() - 2 + 60);
+            par.vencimento = getLocalDateString(d);
+            changed = true;
+          }
+          if (par.pedido_id === 1002 && par.vencimento === '2026-06-13') {
+            par.vencimento = todayStr;
+            changed = true;
+          }
+          if (par.pedido_id === 1002 && par.vencimento === '2026-07-13') {
+            const d = new Date(today);
+            d.setDate(today.getDate() + 30);
+            par.vencimento = getLocalDateString(d);
+            changed = true;
+          }
+          if (par.pedido_id === 1003 && par.vencimento === '2026-07-13') {
+            const d = new Date(today);
+            d.setDate(today.getDate() + 30);
+            par.vencimento = getLocalDateString(d);
+            changed = true;
+          }
+        });
+      }
+
+      if (db.localizacoes) {
+        db.localizacoes.forEach(loc => {
+          if (loc.pedido_id === 1001 && loc.tipo === 'venda' && !loc.data_hora.startsWith(twoDaysAgoStr)) {
+            loc.data_hora = `${twoDaysAgoStr}T10:00:00Z`;
+            changed = true;
+          }
+          if (loc.pedido_id === 1001 && loc.tipo === 'entrega' && !loc.data_hora.startsWith(twoDaysAgoStr)) {
+            loc.data_hora = `${twoDaysAgoStr}T14:30:00Z`;
+            changed = true;
+          }
+          if (loc.pedido_id === 1002 && loc.tipo === 'venda' && !loc.data_hora.startsWith(todayStr)) {
+            loc.data_hora = `${todayStr}T09:15:00Z`;
+            changed = true;
+          }
+          if (loc.pedido_id === 1003 && loc.tipo === 'venda' && !loc.data_hora.startsWith(todayStr)) {
+            loc.data_hora = `${todayStr}T11:30:00Z`;
+            changed = true;
+          }
+        });
+      }
+
+      return changed;
+    }
+
     function getDb() {
       const data = localStorage.getItem(LOCAL_STORAGE_KEY);
+      let db;
       if (!data) {
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(INITIAL_DATA));
-        return INITIAL_DATA;
+        db = JSON.parse(JSON.stringify(INITIAL_DATA));
+        adjustMockDates(db);
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(db));
+        return db;
       }
-      return JSON.parse(data);
+      db = JSON.parse(data);
+      if (adjustMockDates(db)) {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(db));
+      }
+      return db;
     }
 
     function saveDb(data) {
@@ -148,7 +245,9 @@
     }
 
     function resetDb() {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(INITIAL_DATA));
+      const db = JSON.parse(JSON.stringify(INITIAL_DATA));
+      adjustMockDates(db);
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(db));
       window.dispatchEvent(new Event('fortegado_db_update'));
     }
 
@@ -711,7 +810,7 @@
       useEffect(() => {
         const handle = () => {
           const creds = getCredentials();
-          setIsOnline(!creds.simulateOffline);
+          setIsOnline(navigator.onLine && !creds.simulateOffline);
         };
         window.addEventListener('online', handle);
         window.addEventListener('offline', () => setIsOnline(false));
@@ -728,12 +827,19 @@
       }, []);
 
       const handleSync = async () => {
+        if (syncing) return;
         setSyncing(true);
         try {
+          const queueBefore = getSyncQueue();
           const res = await syncQueueToSupabase();
-          // Enviar pro Google Sheets também
-          const queue = getSyncQueue();
-          for (const it of queue) {
+          
+          // Sincronizar com o Google Sheets somente os itens processados com sucesso no Supabase
+          const queueAfter = getSyncQueue();
+          const processedItems = queueBefore.filter(itemBefore => 
+            !queueAfter.some(itemAfter => itemAfter.id === itemBefore.id)
+          );
+
+          for (const it of processedItems) {
             await syncToGoogleSheets(it.actionType, it.payload);
           }
           alert(`Sincronização concluída!`);
@@ -744,6 +850,13 @@
           setSyncing(false);
         }
       };
+
+      // Auto-sync ao carregar ou conectar
+      useEffect(() => {
+        if (isOnline && queueCount > 0 && !syncing) {
+          handleSync();
+        }
+      }, [isOnline, queueCount, syncing]);
 
       return (
         <div className={`connection-bar ${isOnline ? 'online' : 'offline'}`} style={{ borderRadius: '8px', marginBottom: '14px' }}>
@@ -769,14 +882,37 @@
       const load = () => {
         const db = getDb();
         const creds = getCredentials();
-        setUser(db.usuarios.find(u => u.id === Number(creds.activeUserId)) || {});
+        const activeUser = db.usuarios.find(u => u.id === Number(creds.activeUserId)) || {};
+        setUser(activeUser);
         
-        const total = db.pedidos.filter(p => p.status !== 'Cancelado').reduce((a,c)=>a+c.total, 0);
-        const low = db.estoque.filter(e => (e.quantidade_atual - e.quantidade_reservada) <= e.estoque_minimo).length;
-        const unpaid = db.parcelas.filter(p => !p.pago).reduce((a,c)=>a+c.valor, 0);
-        const deliv = db.pedidos.filter(p => p.status === 'Emitido').length;
+        // Vendas hoje (emissão hoje, filtrado por vendedor se não for administrador)
+        const hojeStr = getLocalDateString(new Date());
+        const pedidosHoje = db.pedidos.filter(p => {
+          const pedDataStr = getLocalDateString(new Date(p.data));
+          const matchesUser = activeUser.perfil === 'Administrador' || p.vendedor_id === activeUser.id;
+          return pedDataStr === hojeStr && p.status !== 'Cancelado' && matchesUser;
+        });
+        const totalHoje = pedidosHoje.reduce((a, c) => a + c.total, 0);
 
-        setMetrics({ todaySales: total, lowStock: low, receive: unpaid, deliveries: deliv });
+        // Estoque baixo
+        const low = db.estoque.filter(e => (e.quantidade_atual - e.quantidade_reservada) <= e.estoque_minimo).length;
+
+        // Contas a receber (parcelas não pagas e não canceladas, filtradas por vendedor se necessário)
+        const canceladosIds = db.pedidos.filter(p => p.status === 'Cancelado').map(p => p.id);
+        const parcelasPendentes = db.parcelas.filter(par => {
+          const ped = db.pedidos.find(p => p.id === par.pedido_id) || {};
+          const matchesUser = activeUser.perfil === 'Administrador' || ped.vendedor_id === activeUser.id;
+          return !par.pago && !canceladosIds.includes(par.pedido_id) && matchesUser;
+        });
+        const totalReceber = parcelasPendentes.reduce((a, c) => a + c.valor, 0);
+
+        // Entregas pendentes (pedidos com status "Emitido", filtrados por vendedor se necessário)
+        const deliv = db.pedidos.filter(p => {
+          const matchesUser = activeUser.perfil === 'Administrador' || p.vendedor_id === activeUser.id;
+          return p.status === 'Emitido' && matchesUser;
+        }).length;
+
+        setMetrics({ todaySales: totalHoje, lowStock: low, receive: totalReceber, deliveries: deliv });
       };
 
       useEffect(() => {
@@ -796,16 +932,16 @@
 
           <div className="dashboard-grid">
             <div className="card kpi-card kpi-vendas" onClick={() => setView('financeiro')} style={{ cursor: 'pointer' }}>
-              <div className="kpi-title">Total Vendas</div>
-              <div className="kpi-value">R$ {metrics.todaySales.toFixed(2)}</div>
+              <div className="kpi-title">Vendas Hoje</div>
+              <div className="kpi-value">R$ {metrics.todaySales.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
             </div>
             <div className="card kpi-card kpi-estoque" onClick={() => setView('estoque')} style={{ cursor: 'pointer' }}>
               <div className="kpi-title">Estoque Crítico</div>
               <div className="kpi-value" style={{ color: metrics.lowStock > 0 ? 'red' : 'inherit' }}>{metrics.lowStock}</div>
             </div>
             <div className="card kpi-card kpi-financeiro" onClick={() => setView('financeiro')} style={{ cursor: 'pointer' }}>
-              <div className="kpi-title">Contas a Receber</div>
-              <div className="kpi-value">R$ {metrics.receive.toFixed(2)}</div>
+              <div className="kpi-title">A Receber</div>
+              <div className="kpi-value">R$ {metrics.receive.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
             </div>
             <div className="card kpi-card kpi-entregas" onClick={() => setView('entregas')} style={{ cursor: 'pointer' }}>
               <div className="kpi-title">Entregas Pendentes</div>
@@ -1151,18 +1287,18 @@
         let computed = [];
         const today = new Date();
         if (payCond === 'À vista') {
-          computed.push({ vencimento: today.toISOString().split('T')[0], valor: orderTotal });
+          computed.push({ vencimento: getLocalDateString(today), valor: orderTotal });
         } else if (payCond === 'Prazo direto' && payDetail) {
           const due = new Date();
           due.setDate(today.getDate() + Number(payDetail));
-          computed.push({ vencimento: due.toISOString().split('T')[0], valor: orderTotal });
+          computed.push({ vencimento: getLocalDateString(due), valor: orderTotal });
         } else if (payCond === 'Parcelado' && payDetail) {
           const intervals = payDetail.split('/').map(Number);
           const val = orderTotal / intervals.length;
           intervals.forEach(d => {
             const due = new Date();
             due.setDate(today.getDate() + d);
-            computed.push({ vencimento: due.toISOString().split('T')[0], valor: val });
+            computed.push({ vencimento: getLocalDateString(due), valor: val });
           });
         }
         setInstallments(computed);
