@@ -40,12 +40,16 @@ export default function App() {
       try {
         const res = await downloadDataFromSupabase();
         if (res.success) {
-          console.log('[Supabase] Dados baixados e sincronizados com sucesso na inicialização.');
+          console.log('[Supabase] Dados baixados com sucesso:', res.counts);
           loadUser();
           loadEmpresa();
+          // Notifica todos os componentes que os dados foram atualizados
+          window.dispatchEvent(new Event('fortegado_db_update'));
+        } else {
+          console.warn('[Supabase] Falha no download inicial:', res.reason);
         }
       } catch (e) {
-        console.error('[Supabase] Falha na sincronização inicial:', e);
+        console.error('[Supabase] Erro inesperado na sincronização inicial:', e);
       }
     };
     syncOnStartup();

@@ -3,16 +3,22 @@ import { createClient } from '@supabase/supabase-js';
 import { getCredentials, getSyncQueue, saveSyncQueue, getDb, saveDb } from './db';
 
 let supabaseInstance = null;
+let lastCredKey = null;
 
 // Obter cliente Supabase ativo
 function getSupabaseClient() {
   const creds = getCredentials();
   if (!creds.supabaseUrl || !creds.supabaseAnonKey) {
+    console.warn('[Supabase] Credenciais não configuradas.');
     return null;
   }
   
-  if (!supabaseInstance) {
+  // Recriar instância se as credenciais mudaram
+  const credKey = creds.supabaseUrl + '|' + creds.supabaseAnonKey;
+  if (!supabaseInstance || lastCredKey !== credKey) {
+    console.log('[Supabase] Criando cliente com URL:', creds.supabaseUrl);
     supabaseInstance = createClient(creds.supabaseUrl, creds.supabaseAnonKey);
+    lastCredKey = credKey;
   }
   return supabaseInstance;
 }
@@ -20,12 +26,14 @@ function getSupabaseClient() {
 // Resetar instância se credenciais mudarem
 window.addEventListener('fortegado_credentials_update', () => {
   supabaseInstance = null;
+  lastCredKey = null;
+  console.log('[Supabase] Instância resetada por atualização de credenciais.');
 });
 
 // Sincronizar Fila Offline
 export async function syncQueueToSupabase() {
   const client = getSupabaseClient();
-  if (!client) return { success: false, reason: 'Supabase não configurado' };
+  if (!client) return { success: false, reason: 'Supabase não configurado. Insira a URL e a Anon Key nas configurações.' };
   
   const creds = getCredentials();
   if (creds.simulateOffline) return { success: false, reason: 'Modo Offline Ativado' };
@@ -36,55 +44,63 @@ export async function syncQueueToSupabase() {
   console.log(`[Supabase Sync] Iniciando sincronização de ${queue.length} itens.`);
   let processedCount = 0;
   const newQueue = [...queue];
+  let syncError = null;
 
   for (const item of queue) {
     try {
       const { actionType, payload } = item;
-      let syncSuccess = false;
+      let result = { success: false, error: { message: 'Ação desconhecida na fila' } };
 
       if (actionType === 'CREATE_ORDER') {
-        syncSuccess = await syncCreateOrder(client, payload);
+        result = await syncCreateOrder(client, payload);
       } else if (actionType === 'CONFIRM_DELIVERY') {
-        syncSuccess = await syncConfirmDelivery(client, payload);
+        result = await syncConfirmDelivery(client, payload);
       } else if (actionType === 'CANCEL_ORDER') {
-        syncSuccess = await syncCancelOrder(client, payload);
+        result = await syncCancelOrder(client, payload);
       } else if (actionType === 'REOPEN_ORDER') {
-        syncSuccess = await syncReopenOrder(client, payload);
+        result = await syncReopenOrder(client, payload);
       } else if (actionType === 'ADJUST_STOCK') {
-        syncSuccess = await syncAdjustStock(client, payload);
+        result = await syncAdjustStock(client, payload);
       } else if (actionType === 'RECEIVE_INSTALLMENT') {
-        syncSuccess = await syncReceiveInstallment(client, payload);
+        result = await syncReceiveInstallment(client, payload);
       } else if (actionType === 'CREATE_CLIENT') {
-        syncSuccess = await syncCreateClient(client, payload);
+        result = await syncCreateClient(client, payload);
       } else if (actionType === 'UPDATE_PRODUCT_PRICE') {
-        syncSuccess = await syncUpdateProductPrice(client, payload);
+        result = await syncUpdateProductPrice(client, payload);
       } else if (actionType === 'UPDATE_PRODUCT') {
-        syncSuccess = await syncUpdateProduct(client, payload);
+        result = await syncUpdateProduct(client, payload);
       } else if (actionType === 'CREATE_PRODUCT') {
-        syncSuccess = await syncCreateProduct(client, payload);
+        result = await syncCreateProduct(client, payload);
       } else if (actionType === 'UPDATE_COMPANY') {
-        syncSuccess = await syncUpdateCompany(client, payload);
+        result = await syncUpdateCompany(client, payload);
       } else {
         // Tipo desconhecido: remove da fila para não bloquear
-        syncSuccess = true;
+        result = { success: true };
       }
 
-      if (syncSuccess) {
+      if (result.success) {
         // Remover da fila
         const idx = newQueue.findIndex(q => q.id === item.id);
         if (idx > -1) newQueue.splice(idx, 1);
         processedCount++;
       } else {
         // Interrompe na primeira falha para manter a ordem cronológica
+        syncError = result.error;
         break;
       }
     } catch (err) {
       console.error('[Supabase Sync Error]', err);
+      syncError = err;
       break;
     }
   }
 
   saveSyncQueue(newQueue);
+  
+  if (syncError) {
+    const errorMsg = typeof syncError === 'string' ? syncError : (syncError.message || JSON.stringify(syncError));
+    return { success: false, reason: errorMsg, processed: processedCount };
+  }
   return { success: true, processed: processedCount };
 }
 
@@ -175,7 +191,7 @@ async function syncCreateOrder(client, payload) {
   });
   if (errPed) {
     console.error('[Supabase Sync] Erro ao criar pedido:', errPed);
-    return false;
+    return { success: false, error: errPed };
   }
 
   // 2. Inserir Itens
@@ -191,7 +207,7 @@ async function syncCreateOrder(client, payload) {
   );
   if (errItens) {
     console.error('[Supabase Sync] Erro ao criar itens do pedido:', errItens);
-    return false;
+    return { success: false, error: errItens };
   }
 
   // 3. Inserir Parcelas
@@ -206,7 +222,7 @@ async function syncCreateOrder(client, payload) {
   );
   if (errPar) {
     console.error('[Supabase Sync] Erro ao criar parcelas:', errPar);
-    return false;
+    return { success: false, error: errPar };
   }
 
   // 4. Inserir Assinatura
@@ -225,7 +241,7 @@ async function syncCreateOrder(client, payload) {
   });
   if (errAss) {
     console.error('[Supabase Sync] Erro ao criar assinatura no Supabase:', errAss);
-    return false;
+    return { success: false, error: errAss };
   }
 
   // 5. Inserir Localização
@@ -239,7 +255,7 @@ async function syncCreateOrder(client, payload) {
   });
   if (errLoc) {
     console.error('[Supabase Sync] Erro ao criar localização da venda:', errLoc);
-    return false;
+    return { success: false, error: errLoc };
   }
 
   // 6. Atualizar estoque reservado
@@ -259,7 +275,7 @@ async function syncCreateOrder(client, payload) {
     }
   }
 
-  return true;
+  return { success: true };
 }
 
 async function syncConfirmDelivery(client, payload) {
@@ -267,7 +283,7 @@ async function syncConfirmDelivery(client, payload) {
   const { error: errPed } = await client.from('pedidos').update({ status: 'Entregue' }).eq('id', payload.pedidoId);
   if (errPed) {
     console.error('[Supabase Sync] Erro ao atualizar status do pedido para entregue:', errPed);
-    return false;
+    return { success: false, error: errPed };
   }
 
   // 2. Inserir Foto da entrega
@@ -286,7 +302,7 @@ async function syncConfirmDelivery(client, payload) {
   });
   if (errFoto) {
     console.error('[Supabase Sync] Erro ao inserir foto da entrega no Supabase:', errFoto);
-    return false;
+    return { success: false, error: errFoto };
   }
 
   // 3. Inserir Localização
@@ -300,7 +316,7 @@ async function syncConfirmDelivery(client, payload) {
   });
   if (errLoc) {
     console.error('[Supabase Sync] Erro ao criar localização da entrega:', errLoc);
-    return false;
+    return { success: false, error: errLoc };
   }
 
   // 4. Atualizar Estoque (Debitar Reservado e Baixar Atual)
@@ -321,14 +337,14 @@ async function syncConfirmDelivery(client, payload) {
     }
   }
 
-  return true;
+  return { success: true };
 }
 
 async function syncCancelOrder(client, payload) {
   const { error: errPed } = await client.from('pedidos').update({ status: 'Cancelado' }).eq('id', payload.pedidoId);
   if (errPed) {
     console.error('[Supabase Sync] Erro ao atualizar status do pedido para cancelado:', errPed);
-    return false;
+    return { success: false, error: errPed };
   }
 
   // Se estava Emitido, libera o estoque reservado no Supabase
@@ -353,14 +369,14 @@ async function syncCancelOrder(client, payload) {
     }
   }
 
-  return true;
+  return { success: true };
 }
 
 async function syncReopenOrder(client, payload) {
   const { error: errPed } = await client.from('pedidos').update({ status: 'Emitido' }).eq('id', payload.pedidoId);
   if (errPed) {
     console.error('[Supabase Sync] Erro ao reabrir pedido:', errPed);
-    return false;
+    return { success: false, error: errPed };
   }
 
   // Reservar estoque novamente
@@ -383,7 +399,7 @@ async function syncReopenOrder(client, payload) {
     }
   }
 
-  return true;
+  return { success: true };
 }
 
 async function syncAdjustStock(client, payload) {
@@ -394,16 +410,18 @@ async function syncAdjustStock(client, payload) {
   }).eq('produto_id', payload.produtoId);
   if (error) {
     console.error('[Supabase Sync] Erro ao ajustar estoque:', error);
+    return { success: false, error };
   }
-  return !error;
+  return { success: true };
 }
 
 async function syncReceiveInstallment(client, payload) {
   const { error } = await client.from('parcelas').update({ pago: true }).eq('id', payload.parcelaId);
   if (error) {
     console.error('[Supabase Sync] Erro ao registrar recebimento de parcela:', error);
+    return { success: false, error };
   }
-  return !error;
+  return { success: true };
 }
 
 async function syncCreateClient(client, payload) {
@@ -421,8 +439,9 @@ async function syncCreateClient(client, payload) {
   });
   if (error) {
     console.error('[Supabase Sync] Erro ao criar cliente:', error);
+    return { success: false, error };
   }
-  return !error;
+  return { success: true };
 }
 
 async function syncUpdateProductPrice(client, payload) {
@@ -431,8 +450,9 @@ async function syncUpdateProductPrice(client, payload) {
   }).eq('id', payload.id);
   if (error) {
     console.error('[Supabase Sync] Erro ao atualizar preço do produto:', error);
+    return { success: false, error };
   }
-  return !error;
+  return { success: true };
 }
 
 async function syncUpdateProduct(client, payload) {
@@ -446,8 +466,9 @@ async function syncUpdateProduct(client, payload) {
   const { error } = await client.from('produtos').update(updates).eq('id', id);
   if (error) {
     console.error('[Supabase Sync] Erro ao atualizar dados do produto:', error);
+    return { success: false, error };
   }
-  return !error;
+  return { success: true };
 }
 
 async function syncCreateProduct(client, payload) {
@@ -470,7 +491,7 @@ async function syncCreateProduct(client, payload) {
   });
   if (error) {
     console.error('[Supabase Sync] Erro ao cadastrar produto:', error);
-    return false;
+    return { success: false, error };
   }
   const { error: errEst } = await client.from('estoque').insert({
     produto_id: payload.id,
@@ -481,7 +502,7 @@ async function syncCreateProduct(client, payload) {
   if (errEst) {
     console.error('[Supabase Sync] Erro ao criar estoque inicial do produto:', errEst);
   }
-  return true;
+  return { success: true };
 }
 
 async function syncUpdateCompany(client, payload) {
@@ -495,8 +516,9 @@ async function syncUpdateCompany(client, payload) {
   const { error } = await client.from('empresas').update(updates).eq('id', id);
   if (error) {
     console.error('[Supabase Sync] Erro ao atualizar empresa:', error);
+    return { success: false, error };
   }
-  return !error;
+  return { success: true };
 }
 
 // --- Sincronização Direta (Admin — sem fila) ---
@@ -587,38 +609,70 @@ export async function saveProductToSupabase(produtoData) {
 
 export async function downloadDataFromSupabase() {
   const client = getSupabaseClient();
-  if (!client) return { success: false, reason: 'Supabase não configurado' };
+  if (!client) return { success: false, reason: 'Supabase não configurado.' };
+
+  const creds = getCredentials();
+  if (creds.simulateOffline) return { success: false, reason: 'Modo Offline Ativado' };
+
+  console.log('[Supabase Download] Iniciando download de dados do Supabase...');
 
   try {
-    const { data: empresas } = await client.from('empresas').select('*');
-    const { data: usuarios } = await client.from('usuarios').select('*');
-    const { data: clientes } = await client.from('clientes').select('*');
-    const { data: produtos } = await client.from('produtos').select('*');
-    const { data: estoque } = await client.from('estoque').select('*');
-    const { data: pedidos } = await client.from('pedidos').select('*');
-    const { data: itens_pedido } = await client.from('itens_pedido').select('*');
-    const { data: parcelas } = await client.from('parcelas').select('*');
-    const { data: assinaturas } = await client.from('assinaturas').select('*');
-    const { data: fotos_entrega } = await client.from('fotos_entrega').select('*');
-    const { data: localizacoes } = await client.from('localizacoes').select('*');
+    const { data: empresas, error: errEmp } = await client.from('empresas').select('*');
+    if (errEmp) throw errEmp;
+    
+    const { data: usuarios, error: errUsr } = await client.from('usuarios').select('*');
+    if (errUsr) throw errUsr;
+    
+    const { data: clientes, error: errCli } = await client.from('clientes').select('*');
+    if (errCli) throw errCli;
+    
+    const { data: produtos, error: errPrd } = await client.from('produtos').select('*');
+    if (errPrd) throw errPrd;
+    
+    const { data: estoque, error: errEst } = await client.from('estoque').select('*');
+    if (errEst) throw errEst;
+    
+    const { data: pedidos, error: errPed } = await client.from('pedidos').select('*');
+    if (errPed) throw errPed;
+    
+    const { data: itens_pedido, error: errItens } = await client.from('itens_pedido').select('*');
+    if (errItens) throw errItens;
+    
+    const { data: parcelas, error: errPar } = await client.from('parcelas').select('*');
+    if (errPar) throw errPar;
+    
+    const { data: assinaturas, error: errAss } = await client.from('assinaturas').select('*');
+    if (errAss) throw errAss;
+    
+    const { data: fotos_entrega, error: errFoto } = await client.from('fotos_entrega').select('*');
+    if (errFoto) throw errFoto;
+    
+    const { data: localizacoes, error: errLoc } = await client.from('localizacoes').select('*');
+    if (errLoc) throw errLoc;
 
     const db = getDb();
-    if (empresas?.length) db.empresas = empresas;
-    if (usuarios?.length) db.usuarios = usuarios;
-    if (clientes?.length) db.clientes = clientes;
-    if (produtos?.length) db.produtos = produtos;
-    if (estoque?.length) db.estoque = estoque;
-    if (pedidos?.length) db.pedidos = pedidos;
-    if (itens_pedido?.length) db.itens_pedido = itens_pedido;
-    if (parcelas?.length) db.parcelas = parcelas;
-    if (assinaturas?.length) db.assinaturas = assinaturas;
-    if (fotos_entrega?.length) db.fotos_entrega = fotos_entrega;
-    if (localizacoes?.length) db.localizacoes = localizacoes;
+
+    // Sobrescreve os dados locais com os dados do Supabase.
+    // Usa os dados do Supabase se retornar array (mesmo vazio), para limpar dados mock antigos.
+    // Para tabelas críticas (empresas, usuarios) sempre sobrescreve se vier array válido.
+    if (Array.isArray(empresas)) db.empresas = empresas.length ? empresas : db.empresas;
+    if (Array.isArray(usuarios) && usuarios.length) db.usuarios = usuarios;
+    if (Array.isArray(clientes) && clientes.length) db.clientes = clientes;
+    if (Array.isArray(produtos) && produtos.length) db.produtos = produtos;
+    if (Array.isArray(estoque) && estoque.length) db.estoque = estoque;
+    if (Array.isArray(pedidos)) db.pedidos = pedidos; // Sempre substitui (pode estar vazio no Supabase)
+    if (Array.isArray(itens_pedido)) db.itens_pedido = itens_pedido;
+    if (Array.isArray(parcelas)) db.parcelas = parcelas;
+    if (Array.isArray(assinaturas)) db.assinaturas = assinaturas;
+    if (Array.isArray(fotos_entrega)) db.fotos_entrega = fotos_entrega;
+    if (Array.isArray(localizacoes)) db.localizacoes = localizacoes;
+
+    console.log(`[Supabase Download] Sincronizado: ${empresas?.length || 0} empresas, ${usuarios?.length || 0} usuários, ${pedidos?.length || 0} pedidos, ${clientes?.length || 0} clientes.`);
 
     saveDb(db);
-    return { success: true };
+    return { success: true, counts: { empresas: empresas?.length, usuarios: usuarios?.length, pedidos: pedidos?.length, clientes: clientes?.length } };
   } catch (err) {
-    console.error(err);
-    return { success: false, reason: err.message };
+    console.error('[Supabase Download Error]', err);
+    return { success: false, reason: err.message || JSON.stringify(err) };
   }
 }

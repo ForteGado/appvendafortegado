@@ -434,88 +434,198 @@
 
     async function syncQueueToSupabase() {
       const creds = getCredentials();
-      if (!creds.supabaseUrl || !creds.supabaseAnonKey) return { success: false, reason: 'Supabase não configurado' };
+      if (!creds.supabaseUrl || !creds.supabaseAnonKey) return { success: false, reason: 'Supabase não configurado. Por favor, insira a URL e a Anon Key.' };
       if (creds.simulateOffline) return { success: false, reason: 'Modo Offline Ativado' };
 
       const queue = getSyncQueue();
       if (queue.length === 0) return { success: true, processed: 0 };
 
+      if (!window.supabase) {
+        return { success: false, reason: 'Biblioteca Supabase (SDK) não pôde ser carregada. Verifique sua conexão com a internet.' };
+      }
+
       // Carregar Supabase client dinamicamente da CDN
-      const supabase = window.supabase.createClient(creds.supabaseUrl, creds.supabaseAnonKey);
+      let supabase;
+      try {
+        supabase = window.supabase.createClient(creds.supabaseUrl, creds.supabaseAnonKey);
+      } catch (err) {
+        return { success: false, reason: `Erro ao inicializar Supabase: ${err.message}` };
+      }
+
       let processedCount = 0;
       const newQueue = [...queue];
+      let syncError = null;
 
       for (const item of queue) {
         try {
           const { actionType, payload } = item;
           let success = false;
+          let lastError = null;
 
           if (actionType === 'CREATE_ORDER') {
             const { error: errPed } = await supabase.from('pedidos').insert(payload.pedido);
-            const { error: errItens } = await supabase.from('itens_pedido').insert(payload.itens);
-            const { error: errPar } = await supabase.from('parcelas').insert(payload.parcelas);
-            
-            // Upload da assinatura para o Storage
-            let assinaturaUrl = payload.assinatura.imagem;
-            if (assinaturaUrl && (assinaturaUrl.startsWith('data:') || assinaturaUrl.length > 500)) {
-              const uploadedUrl = await uploadImageToSupabase(supabase, assinaturaUrl, 'assinaturas', `pedido_${payload.pedido.id}`);
-              if (uploadedUrl) {
-                assinaturaUrl = uploadedUrl;
+            if (errPed) { lastError = errPed; }
+            else {
+              const { error: errItens } = await supabase.from('itens_pedido').insert(payload.itens);
+              if (errItens) { lastError = errItens; }
+              else {
+                const { error: errPar } = await supabase.from('parcelas').insert(payload.parcelas);
+                if (errPar) { lastError = errPar; }
+                else {
+                  let assinaturaUrl = payload.assinatura.imagem;
+                  if (assinaturaUrl && (assinaturaUrl.startsWith('data:') || assinaturaUrl.length > 500)) {
+                    const uploadedUrl = await uploadImageToSupabase(supabase, assinaturaUrl, 'assinaturas', `pedido_${payload.pedido.id}`);
+                    if (uploadedUrl) assinaturaUrl = uploadedUrl;
+                  }
+                  const { error: errAss } = await supabase.from('assinaturas').insert({
+                    ...payload.assinatura,
+                    imagem: assinaturaUrl
+                  });
+                  if (errAss) { lastError = errAss; }
+                  else {
+                    const { error: errLoc } = await supabase.from('localizacoes').insert(payload.localizacao);
+                    if (errLoc) { lastError = errLoc; }
+                  }
+                }
               }
             }
-            const { error: errAss } = await supabase.from('assinaturas').insert({
-              ...payload.assinatura,
-              imagem: assinaturaUrl
-            });
-
-            const { error: errLoc } = await supabase.from('localizacoes').insert(payload.localizacao);
-            success = !errPed && !errItens && !errPar && !errAss && !errLoc;
+            success = !lastError;
           } else if (actionType === 'CONFIRM_DELIVERY') {
             const { error: errPed } = await supabase.from('pedidos').update({ status: 'Entregue' }).eq('id', payload.pedidoId);
-            
-            // Upload da foto da entrega para o Storage
-            let fotoUrl = payload.foto.imagem;
-            if (fotoUrl && (fotoUrl.startsWith('data:') || fotoUrl.length > 500)) {
-              const uploadedUrl = await uploadImageToSupabase(supabase, fotoUrl, 'entregas', `pedido_${payload.foto.pedido_id}`);
-              if (uploadedUrl) {
-                fotoUrl = uploadedUrl;
+            if (errPed) { lastError = errPed; }
+            else {
+              let fotoUrl = payload.foto.imagem;
+              if (fotoUrl && (fotoUrl.startsWith('data:') || fotoUrl.length > 500)) {
+                const uploadedUrl = await uploadImageToSupabase(supabase, fotoUrl, 'entregas', `pedido_${payload.foto.pedido_id}`);
+                if (uploadedUrl) fotoUrl = uploadedUrl;
+              }
+              const { error: errFoto } = await supabase.from('fotos_entrega').insert({
+                ...payload.foto,
+                imagem: fotoUrl
+              });
+              if (errFoto) { lastError = errFoto; }
+              else {
+                const { error: errLoc } = await supabase.from('localizacoes').insert(payload.localizacao);
+                if (errLoc) { lastError = errLoc; }
               }
             }
-            const { error: errFoto } = await supabase.from('fotos_entrega').insert({
-              ...payload.foto,
-              imagem: fotoUrl
-            });
-
-            const { error: errLoc } = await supabase.from('localizacoes').insert(payload.localizacao);
-            success = !errPed && !errFoto && !errLoc;
+            success = !lastError;
           } else if (actionType === 'CANCEL_ORDER') {
             const { error: errPed } = await supabase.from('pedidos').update({ status: 'Cancelado' }).eq('id', payload.pedidoId);
-            success = !errPed;
+            if (errPed) lastError = errPed;
+            success = !lastError;
           } else if (actionType === 'REOPEN_ORDER') {
             const { error: errPed } = await supabase.from('pedidos').update({ status: 'Emitido' }).eq('id', payload.pedidoId);
-            success = !errPed;
+            if (errPed) lastError = errPed;
+            success = !lastError;
           } else if (actionType === 'RECEIVE_INSTALLMENT') {
             const { error: errPar } = await supabase.from('parcelas').update({ pago: true }).eq('id', payload.parcelaId);
-            success = !errPar;
+            if (errPar) lastError = errPar;
+            success = !lastError;
           } else if (actionType === 'CREATE_CLIENT') {
             const { error: errCli } = await supabase.from('clientes').insert(payload);
-            success = !errCli;
+            if (errCli) lastError = errCli;
+            success = !lastError;
+          } else if (actionType === 'ADJUST_STOCK') {
+            const { error: errEst } = await supabase.from('estoque').update({
+              quantidade_atual: payload.quantidade_atual,
+              estoque_minimo: payload.estoque_minimo,
+              updated_at: new Date().toISOString()
+            }).eq('produto_id', payload.produtoId);
+            if (errEst) lastError = errEst;
+            success = !lastError;
+          } else {
+            // Ignorar desconhecido para evitar travamento da fila
+            success = true;
           }
 
           if (success) {
             newQueue.shift();
             processedCount++;
           } else {
+            syncError = lastError;
             break;
           }
         } catch (e) {
           console.error(e);
+          syncError = e;
           break;
         }
       }
 
       saveSyncQueue(newQueue);
+      
+      if (syncError) {
+        return { success: false, reason: syncError.message || JSON.stringify(syncError), processed: processedCount };
+      }
       return { success: true, processed: processedCount };
+    }
+
+    async function downloadDataFromSupabase() {
+      const creds = getCredentials();
+      if (!creds.supabaseUrl || !creds.supabaseAnonKey) return { success: false, reason: 'Supabase não configurado. Por favor, configure nas Configurações.' };
+
+      if (!window.supabase) {
+        return { success: false, reason: 'SDK do Supabase não pôde ser carregado. Verifique a internet.' };
+      }
+
+      try {
+        const supabase = window.supabase.createClient(creds.supabaseUrl, creds.supabaseAnonKey);
+        
+        const { data: empresas, error: errEmp } = await supabase.from('empresas').select('*');
+        if (errEmp) throw errEmp;
+        
+        const { data: usuarios, error: errUsr } = await supabase.from('usuarios').select('*');
+        if (errUsr) throw errUsr;
+        
+        const { data: clientes, error: errCli } = await supabase.from('clientes').select('*');
+        if (errCli) throw errCli;
+        
+        const { data: produtos, error: errPrd } = await supabase.from('produtos').select('*');
+        if (errPrd) throw errPrd;
+        
+        const { data: estoque, error: errEst } = await supabase.from('estoque').select('*');
+        if (errEst) throw errEst;
+        
+        const { data: pedidos, error: errPed } = await supabase.from('pedidos').select('*');
+        if (errPed) throw errPed;
+        
+        const { data: itens_pedido, error: errItens } = await supabase.from('itens_pedido').select('*');
+        if (errItens) throw errItens;
+        
+        const { data: parcelas, error: errPar } = await supabase.from('parcelas').select('*');
+        if (errPar) throw errPar;
+        
+        const { data: assinaturas, error: errAss } = await supabase.from('assinaturas').select('*');
+        if (errAss) throw errAss;
+        
+        const { data: fotos_entrega, error: errFoto } = await supabase.from('fotos_entrega').select('*');
+        if (errFoto) throw errFoto;
+        
+        const { data: localizacoes, error: errLoc } = await supabase.from('localizacoes').select('*');
+        if (errLoc) throw errLoc;
+
+        const db = getDb();
+        // Sobrescreve os dados locais com os dados do Supabase (para limpar dados mock antigos)
+        if (Array.isArray(empresas)) db.empresas = empresas.length ? empresas : db.empresas;
+        if (Array.isArray(usuarios) && usuarios.length) db.usuarios = usuarios;
+        if (Array.isArray(clientes) && clientes.length) db.clientes = clientes;
+        if (Array.isArray(produtos) && produtos.length) db.produtos = produtos;
+        if (Array.isArray(estoque) && estoque.length) db.estoque = estoque;
+        if (Array.isArray(pedidos)) db.pedidos = pedidos; // Sempre substitui
+        if (Array.isArray(itens_pedido)) db.itens_pedido = itens_pedido;
+        if (Array.isArray(parcelas)) db.parcelas = parcelas;
+        if (Array.isArray(assinaturas)) db.assinaturas = assinaturas;
+        if (Array.isArray(fotos_entrega)) db.fotos_entrega = fotos_entrega;
+        if (Array.isArray(localizacoes)) db.localizacoes = localizacoes;
+
+        console.log(`[Supabase Download] Sincronizado: ${empresas?.length || 0} empresas, ${usuarios?.length || 0} usuários, ${pedidos?.length || 0} pedidos.`);
+        saveDb(db);
+        return { success: true };
+      } catch (err) {
+        console.error('[Supabase Download Error]', err);
+        return { success: false, reason: err.message || JSON.stringify(err) };
+      }
     }
 
     // ==========================================
@@ -951,10 +1061,16 @@
           for (const it of processedItems) {
             await syncToGoogleSheets(it.actionType, it.payload);
           }
-          alert(`Sincronização concluída!`);
+
           updateQueue();
+
+          if (res && !res.success) {
+            alert(`Erro na sincronização: ${res.reason || 'Conexão ou banco de dados falhou'}. (${res.processed || 0} ações integradas)`);
+          } else {
+            alert(`Sincronização concluída! ${res ? (res.processed || 0) : 0} ações integradas.`);
+          }
         } catch (e) {
-          alert('Erro: ' + e.message);
+          alert('Erro na sincronização: ' + e.message);
         } finally {
           setSyncing(false);
         }
@@ -1330,8 +1446,18 @@
               </select>
             </div>
             <button type="submit" className="btn btn-primary">Salvar</button>
-          </form>
-          <button className="btn btn-danger" onClick={resetDb} style={{ marginTop: '10px' }}>Resetar Banco Local</button>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+            <button className="btn btn-secondary" onClick={async () => {
+              const res = await downloadDataFromSupabase();
+              if (res.success) {
+                alert('Dados baixados do Supabase com sucesso!');
+                window.location.reload();
+              } else {
+                alert('Falha ao baixar dados do Supabase: ' + res.reason);
+              }
+            }} style={{ width: 'auto' }}>Baixar dados do Supabase</button>
+            <button className="btn btn-danger" onClick={resetDb} style={{ width: 'auto' }}>Resetar Banco Local</button>
+          </div>
         </div>
       );
     }
@@ -1597,6 +1723,24 @@
 
       useEffect(() => {
         load();
+
+        // Sincronizar dados do Supabase na inicialização
+        const syncOnStartup = async () => {
+          try {
+            const res = await downloadDataFromSupabase();
+            if (res.success) {
+              console.log('[Supabase] Dados baixados com sucesso na inicialização. Pedidos:', res.pedidos || 0);
+              load();
+              window.dispatchEvent(new Event('fortegado_db_update'));
+            } else {
+              console.warn('[Supabase] Falha no download inicial:', res.reason);
+            }
+          } catch (e) {
+            console.error('[Supabase] Erro inesperado na inicialização:', e);
+          }
+        };
+        syncOnStartup();
+
         window.addEventListener('fortegado_credentials_update', load);
         window.addEventListener('fortegado_db_update', load);
         return () => {

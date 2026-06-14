@@ -69,13 +69,20 @@ export default function OfflineIndicator() {
         }
       }
 
-      setSyncResult({
-        success: true,
-        message: `Sincronização concluída! ${supResult.processed || 0} ações integradas.`
-      });
-      
       // Atualizar contador local
       updateQueueStatus();
+
+      if (supResult && !supResult.success) {
+        setSyncResult({
+          success: false,
+          message: `Erro na sincronização: ${supResult.reason || 'Conexão ou banco de dados falhou'}. (${supResult.processed || 0} ações integradas)`
+        });
+      } else {
+        setSyncResult({
+          success: true,
+          message: `Sincronização concluída! ${supResult ? (supResult.processed || 0) : 0} ações integradas.`
+        });
+      }
     } catch (err) {
       setSyncResult({
         success: false,
