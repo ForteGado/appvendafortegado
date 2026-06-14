@@ -81,12 +81,19 @@ export async function syncQueueToSupabase() {
       }
 
       if (result.success) {
-        // Remover da fila
         const idx = newQueue.findIndex(q => q.id === item.id);
         if (idx > -1) newQueue.splice(idx, 1);
         processedCount++;
       } else {
-        // Interrompe na primeira falha para manter a ordem cronológica
+        // Se for uma violação permanente de restrição do Postgres (código começa com 23),
+        // avisa no console e ignora o item da fila para evitar travamento.
+        if (result.error && typeof result.error.code === 'string' && result.error.code.startsWith('23')) {
+          console.warn(`[Supabase Sync] Ignorando item da fila devido a erro de constraint permanente (${result.error.code}):`, result.error.message);
+          const idx = newQueue.findIndex(q => q.id === item.id);
+          if (idx > -1) newQueue.splice(idx, 1);
+          processedCount++;
+          continue;
+        }
         syncError = result.error;
         break;
       }

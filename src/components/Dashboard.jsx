@@ -157,25 +157,29 @@ export default function Dashboard({ setView }) {
           <span>Financeiro</span>
         </button>
 
-        <button className="shortcut-btn" onClick={() => setView('configuracoes')}>
-          <Settings />
-          <span>Configurações</span>
-        </button>
+        {currentUser && currentUser.perfil === 'Administrador' && (
+          <button className="shortcut-btn" onClick={() => setView('configuracoes')}>
+            <Settings />
+            <span>Configurações</span>
+          </button>
+        )}
 
-        <button 
-          className="shortcut-btn" 
-          onClick={() => {
-            const creds = getCredentials();
-            if (creds.googleSheetsUrl) {
-              window.open(creds.googleSheetsUrl, '_blank');
-            } else {
-              alert('Configure a URL da planilha nas configurações primeiro.');
-            }
-          }}
-        >
-          <BarChart2 />
-          <span>Planilha</span>
-        </button>
+        {currentUser && currentUser.perfil === 'Administrador' && (
+          <button 
+            className="shortcut-btn" 
+            onClick={() => {
+              const creds = getCredentials();
+              if (creds.googleSheetsUrl) {
+                window.open(creds.googleSheetsUrl, '_blank');
+              } else {
+                alert('Configure a URL da planilha nas configurações primeiro.');
+              }
+            }}
+          >
+            <BarChart2 />
+            <span>Planilha</span>
+          </button>
+        )}
       </div>
 
       {/* Destaque Institucional */}

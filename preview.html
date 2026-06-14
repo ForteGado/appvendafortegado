@@ -534,15 +534,69 @@
             }).eq('produto_id', payload.produtoId);
             if (errEst) lastError = errEst;
             success = !lastError;
+          } else if (actionType === 'CREATE_PRODUCT') {
+            const { error: errProd } = await supabase.from('produtos').insert({
+              id: payload.id,
+              codigo: payload.codigo,
+              nome: payload.nome,
+              unidade: payload.unidade,
+              preco: payload.preco,
+              imagem: payload.imagem || null,
+              descricao: payload.descricao || null
+            });
+            if (errProd) {
+              lastError = errProd;
+            } else {
+              const { error: errEst } = await supabase.from('estoque').insert({
+                produto_id: payload.id,
+                quantidade_atual: Number(payload.quantidade_atual) || 0,
+                quantidade_reservada: 0,
+                estoque_minimo: Number(payload.estoque_minimo) || 5
+              });
+              if (errEst) {
+                console.error('[Supabase Sync] Erro ao criar estoque inicial no preview:', errEst);
+              }
+            }
+            success = !lastError;
+          } else if (actionType === 'UPDATE_PRODUCT') {
+            const { id, ...updates } = payload;
+            const { error: errProd } = await supabase.from('produtos').update(updates).eq('id', id);
+            if (errProd) lastError = errProd;
+            success = !lastError;
+          } else if (actionType === 'UPDATE_PRODUCT_PRICE') {
+            const { error: errProd } = await supabase.from('produtos').update({
+              preco: payload.preco
+            }).eq('id', payload.id);
+            if (errProd) lastError = errProd;
+            success = !lastError;
+          } else if (actionType === 'DELETE_PRODUCT') {
+            const { error: errProd } = await supabase.from('produtos').delete().eq('id', Number(payload.id));
+            if (errProd) lastError = errProd;
+            success = !lastError;
+          } else if (actionType === 'UPDATE_COMPANY') {
+            const { id, ...updates } = payload;
+            const { error: errComp } = await supabase.from('empresas').update(updates).eq('id', id);
+            if (errComp) lastError = errComp;
+            success = !lastError;
           } else {
             // Ignorar desconhecido para evitar travamento da fila
             success = true;
           }
 
           if (success) {
-            newQueue.shift();
+            const idx = newQueue.findIndex(q => q.id === item.id);
+            if (idx > -1) newQueue.splice(idx, 1);
             processedCount++;
           } else {
+            // Se for uma violação permanente de restrição do Postgres (código começa com 23),
+            // avisa no console e ignora o item da fila para evitar travamento.
+            if (lastError && typeof lastError.code === 'string' && lastError.code.startsWith('23')) {
+              console.warn(`[Supabase Sync] Ignorando item da fila no preview devido a erro de constraint permanente (${lastError.code}):`, lastError.message);
+              const idx = newQueue.findIndex(q => q.id === item.id);
+              if (idx > -1) newQueue.splice(idx, 1);
+              processedCount++;
+              continue;
+            }
             syncError = lastError;
             break;
           }
@@ -1187,7 +1241,9 @@
             <button className="shortcut-btn" onClick={() => setView('entregas')}><Truck /><span>Entregas</span></button>
             <button className="shortcut-btn" onClick={() => setView('estoque')}><Package /><span>Estoque</span></button>
             <button className="shortcut-btn" onClick={() => setView('financeiro')}><DollarSign /><span>Financeiro</span></button>
-            <button className="shortcut-btn" onClick={() => setView('configuracoes')}><SettingsIcon /><span>Configurações</span></button>
+            {user.perfil === 'Administrador' && (
+              <button className="shortcut-btn" onClick={() => setView('configuracoes')}><SettingsIcon /><span>Configurações</span></button>
+            )}
           </div>
         </div>
       );
@@ -1861,7 +1917,9 @@
             <button onClick={() => setView('entregas')} style={navItemStyle(view === 'entregas')}><Truck size={18} /><span>Entregas</span></button>
             <button onClick={() => setView('estoque')} style={navItemStyle(view === 'estoque')}><Package size={18} /><span>Estoque</span></button>
             <button onClick={() => setView('financeiro')} style={navItemStyle(view === 'financeiro')}><DollarSign size={18} /><span>Contas</span></button>
-            <button onClick={() => setView('configuracoes')} style={navItemStyle(view === 'configuracoes')}><SettingsIcon size={18} /><span>Config</span></button>
+            {user && user.perfil === 'Administrador' && (
+              <button onClick={() => setView('configuracoes')} style={navItemStyle(view === 'configuracoes')}><SettingsIcon size={18} /><span>Config</span></button>
+            )}
           </nav>
 
           <footer>Forte Gado © 2026 – Vendas e Estoque.</footer>
