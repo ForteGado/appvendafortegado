@@ -482,6 +482,30 @@ export async function saveProductToSupabase(produtoData) {
     console.error('[Supabase] Erro ao salvar produto:', error);
     return { success: false, reason: error.message };
   }
+
+  // Garantir que exista um registro correspondente na tabela estoque no Supabase
+  try {
+    const { data: estData, error: estErr } = await client
+      .from('estoque')
+      .select('id')
+      .eq('produto_id', produtoData.id)
+      .maybeSingle();
+
+    if (!estErr && !estData) {
+      const { error: insErr } = await client.from('estoque').insert({
+        produto_id: produtoData.id,
+        quantidade_atual: 0,
+        quantidade_reservada: 0,
+        estoque_minimo: 5
+      });
+      if (insErr) {
+        console.error('[Supabase] Erro ao criar registro de estoque inicial:', insErr);
+      }
+    }
+  } catch (e) {
+    console.error('[Supabase] Erro de exceção ao criar registro de estoque inicial:', e);
+  }
+
   return { success: true };
 }
 

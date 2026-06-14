@@ -821,6 +821,7 @@
       const parcelas = db.parcelas.filter(p => p.pedido_id === ped.id);
       const signature = db.assinaturas.find(a => a.pedido_id === ped.id);
       const location = db.localizacoes.find(l => l.pedido_id === ped.id && l.tipo === 'venda');
+      const empresa = db.empresas?.[0] || { nome: 'Forte Gado', logotipo: '🐂' };
       
       const resolvedItems = items.map(it => {
         const prod = db.produtos.find(p => p.id === it.produto_id) || {};
@@ -833,8 +834,8 @@
           <title>Pedido ${ped.numero} - Forte Gado</title>
           <style>
             body { font-family: sans-serif; color: #1A1A1A; margin: 20px; }
-            .header { border-bottom: 3px solid #0A2E73; padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; }
-            .logo { font-size: 24px; font-weight: bold; color: #0A2E73; }
+            .header { border-bottom: 3px solid #0A2E73; padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+            .logo { font-size: 24px; font-weight: bold; color: #0A2E73; display: flex; align-items: center; gap: 8px; }
             .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
             .card { background: #F8FAFC; border: 1px solid #E2E8F0; padding: 12px; border-radius: 6px; }
             table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
@@ -847,7 +848,14 @@
         </head>
         <body>
           <div class="header">
-            <div class="logo">🐂 Forte Gado Comercial</div>
+            <div class="logo">
+              ${empresa.logotipo && empresa.logotipo.startsWith('data:') ? (
+                `<img src="${empresa.logotipo}" alt="Logo" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;" />`
+              ) : (
+                `<span class="logo-badge">${empresa.logotipo || '🐂'}</span>`
+              )}
+              ${empresa.nome || 'Forte Gado'}
+            </div>
             <div><h2>PEDIDO DE COMPRA: ${ped.numero}</h2></div>
           </div>
           <div class="grid">

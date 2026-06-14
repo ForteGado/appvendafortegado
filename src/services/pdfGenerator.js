@@ -30,6 +30,7 @@ export function printOrderPDF(pedidoId) {
   });
 
   const formattedDate = new Date(ped.data).toLocaleString('pt-BR');
+  const empresa = db.empresas?.[0] || { nome: 'Forte Gado', logotipo: '🐂' };
   
   // Criar HTML para impressão
   const printContent = `
@@ -312,8 +313,12 @@ export function printOrderPDF(pedidoId) {
         <!-- Topo -->
         <div class="pdf-header">
           <div class="logo-box">
-            <span class="logo-badge">🐂</span>
-            Forte Gado
+            ${empresa.logotipo && empresa.logotipo.startsWith('data:') ? (
+              `<img src="${empresa.logotipo}" alt="Logo" style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover;" />`
+            ) : (
+              `<span class="logo-badge">${empresa.logotipo || '🐂'}</span>`
+            )}
+            ${empresa.nome || 'Forte Gado'}
           </div>
           <div class="title-box">
             <h1>PEDIDO DE COMPRA</h1>
@@ -335,9 +340,9 @@ export function printOrderPDF(pedidoId) {
             <h3>Detalhes da Emissão</h3>
             <p><strong>Data/Hora:</strong> ${formattedDate}</p>
             <p><strong>Vendedor:</strong> ${seller.nome || 'Vendedor'}</p>
-            <p><strong>Empresa:</strong> Forte Gado Comercial Ltda</p>
-            <p><strong>CNPJ Empresa:</strong> 12.345.678/0001-90</p>
-            <p><strong>Telefone Empresa:</strong> (34) 99999-1111</p>
+            <p><strong>Empresa:</strong> ${empresa.nome || 'Forte Gado Comercial Ltda'}</p>
+            <p><strong>CNPJ Empresa:</strong> ${empresa.cnpj || '12.345.678/0001-90'}</p>
+            <p><strong>Telefone Empresa:</strong> ${empresa.telefone || '(34) 99999-1111'}</p>
           </div>
         </div>
 
@@ -412,7 +417,7 @@ export function printOrderPDF(pedidoId) {
 
         <!-- Footer -->
         <div class="footer-institucional">
-          Forte Gado Comercial Ltda – Forte no campo, seguro nas vendas.<br>
+          ${empresa.nome || 'Forte Gado Comercial Ltda'} – Forte no campo, seguro nas vendas.<br>
           Este documento é uma cópia oficial do pedido registrado e assinado digitalmente.
         </div>
 
