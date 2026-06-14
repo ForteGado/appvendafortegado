@@ -5,6 +5,10 @@ import { getDb, getCredentials, saveCredentials } from '../services/db';
 export default function Login({ onLogin }) {
   const [email, setEmail] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [empresa, setEmpresa] = useState(() => {
+    const db = getDb();
+    return db.empresas?.[0] || { nome: 'Forte Gado', logotipo: '🐂' };
+  });
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -66,9 +70,17 @@ export default function Login({ onLogin }) {
       }}>
         {/* Logo Header */}
         <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-          <span style={{ fontSize: '48px', display: 'block', marginBottom: '8px' }}>🐂</span>
+          {empresa.logotipo && empresa.logotipo.startsWith('data:') ? (
+            <img
+              src={empresa.logotipo}
+              alt="Logo"
+              style={{ width: '64px', height: '64px', borderRadius: '50%', objectFit: 'cover', display: 'block', margin: '0 auto 8px', border: '2px solid var(--azul-principal)' }}
+            />
+          ) : (
+            <span style={{ fontSize: '48px', display: 'block', marginBottom: '8px' }}>{empresa.logotipo || '🐂'}</span>
+          )}
           <h2 style={{ fontSize: '1.6rem', color: 'var(--azul-principal)', fontWeight: '800', margin: 0 }}>
-            Forte Gado
+            {empresa.nome || 'Forte Gado'}
           </h2>
           <span style={{ fontSize: '0.8rem', color: 'var(--dourado-premium)', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>
             Vendas & Estoque Agro
