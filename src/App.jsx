@@ -195,13 +195,13 @@ export default function App() {
           <span>Estoque</span>
         </button>
 
-        {/* Financeiro */}
+        {/* Financeiro / Vendas */}
         <button 
           onClick={() => setView('financeiro')} 
           style={navItemStyle(view === 'financeiro')}
         >
           <DollarSign size={20} />
-          <span>Contas</span>
+          <span>{currentUser?.perfil === 'Vendedor' ? 'Vendas' : 'Contas'}</span>
         </button>
 
         {/* Painel Admin (Apenas Administrador) */}

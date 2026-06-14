@@ -61,6 +61,8 @@
     const Sliders = (props) => <LucideIcon name="sliders" {...props} />;
     const Save = (props) => <LucideIcon name="save" {...props} />;
     const Refresh = (props) => <LucideIcon name="refresh-cw" {...props} />;
+    const BarChart2 = (props) => <LucideIcon name="bar-chart-2" {...props} />;
+    const X = (props) => <LucideIcon name="x" {...props} />;
 
     // ==========================================
     // SERVIÇO DE BANCO DE DADOS LOCAL (localStorage)
@@ -1348,20 +1350,84 @@
     function Financial() {
       const [list, setList] = useState([]);
       const [isAdmin, setIsAdmin] = useState(false);
+      const [searchTerm, setSearchTerm] = useState('');
+
+      // Estados para Vendedor
+      const [isVendedor, setIsVendedor] = useState(false);
+      const [vendas, setVendas] = useState([]);
+      const [showReport, setShowReport] = useState(false);
+      const [reportData, setReportData] = useState({
+        dia: { total: 0, qtd: 0 },
+        mes: { total: 0, qtd: 0 },
+        trimestre: { total: 0, qtd: 0 }
+      });
 
       const load = () => {
         const db = getDb();
         const creds = getCredentials();
         const user = db.usuarios.find(u => u.id === Number(creds.activeUserId)) || {};
+        const isVend = user.perfil === 'Vendedor';
+        setIsVendedor(isVend);
         setIsAdmin(user.perfil === 'Administrador');
 
-        const resolved = db.parcelas.map(par => {
-          const ped = db.pedidos.find(p => p.id === par.pedido_id) || {};
-          const cli = db.clientes.find(c => c.id === ped.cliente_id) || {};
-          return { ...par, cliente: cli.nome, ref: ped.numero, status: ped.status };
-        }).filter(par => par.status !== 'Cancelado');
+        if (isVend) {
+          // Vendas do vendedor
+          const mySales = db.pedidos
+            .filter(p => p.vendedor_id === user.id)
+            .map(p => {
+              const cli = db.clientes.find(c => c.id === p.cliente_id) || {};
+              return { ...p, clienteNome: cli.nome || 'Cliente Desconhecido' };
+            });
+          
+          mySales.sort((a, b) => new Date(b.data) - new Date(a.data));
+          setVendas(mySales);
 
-        setList(resolved);
+          // Calcular estatísticas
+          const today = new Date();
+          const todayStr = getLocalDateString(today);
+          const currentYear = today.getFullYear();
+          const currentMonth = today.getMonth();
+          const currentQuarter = Math.floor(currentMonth / 3);
+
+          const stats = {
+            dia: { total: 0, qtd: 0 },
+            mes: { total: 0, qtd: 0 },
+            trimestre: { total: 0, qtd: 0 }
+          };
+
+          mySales.filter(p => p.status !== 'Cancelado').forEach(p => {
+            const pDate = new Date(p.data);
+            const pDateStr = getLocalDateString(pDate);
+
+            if (pDateStr === todayStr) {
+              stats.dia.total += p.total;
+              stats.dia.qtd += 1;
+            }
+
+            if (pDate.getFullYear() === currentYear && pDate.getMonth() === currentMonth) {
+              stats.mes.total += p.total;
+              stats.mes.qtd += 1;
+            }
+
+            const pQuarter = Math.floor(pDate.getMonth() / 3);
+            if (pDate.getFullYear() === currentYear && pQuarter === currentQuarter) {
+              stats.trimestre.total += p.total;
+              stats.trimestre.qtd += 1;
+            }
+          });
+
+          setReportData(stats);
+
+        } else {
+          // Contas a receber padrão
+          const resolved = db.parcelas.map(par => {
+            const ped = db.pedidos.find(p => p.id === par.pedido_id) || {};
+            const cli = db.clientes.find(c => c.id === ped.cliente_id) || {};
+            return { ...par, cliente: cli.nome, ref: ped.numero, status: ped.status };
+          }).filter(par => par.status !== 'Cancelado');
+
+          setList(resolved);
+        }
       };
 
       useEffect(() => {
@@ -1377,26 +1443,206 @@
         }
       };
 
+      // Filtros
+      const filteredInstallments = list.filter(item => {
+        const term = searchTerm.toLowerCase();
+        return (
+          item.cliente.toLowerCase().includes(term) ||
+          item.ref.toLowerCase().includes(term)
+        );
+      });
+
+      const filteredVendas = vendas.filter(item => {
+        const term = searchTerm.toLowerCase();
+        return (
+          item.clienteNome.toLowerCase().includes(term) ||
+          item.numero.toLowerCase().includes(term)
+        );
+      });
+
+      // Se for vendedor, renderiza visualização de Vendas
+      if (isVendedor) {
+        return (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+              <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Minhas Vendas Realizadas</h2>
+              <button
+                className="btn btn-cta"
+                onClick={() => setShowReport(true)}
+                style={{
+                  width: 'auto',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  fontSize: '0.85rem',
+                  fontWeight: 'bold',
+                  borderRadius: '8px'
+                }}
+              >
+                <BarChart2 size={14} />
+                Relatório de Vendas
+              </button>
+            </div>
+
+            {/* Busca */}
+            <div style={{ position: 'relative', marginBottom: '16px' }}>
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Pesquisar por cliente ou número de venda..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{ paddingLeft: '36px' }}
+              />
+              <Search size={16} style={{ position: 'absolute', left: '10px', top: '13px', color: 'var(--cinza-medio)' }} />
+            </div>
+
+            {/* Tabela de Vendas */}
+            <div className="card" style={{ padding: '8px', overflowX: 'auto' }}>
+              {filteredVendas.length > 0 ? (
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Nº Pedido</th>
+                      <th>Cliente</th>
+                      <th>Data</th>
+                      <th>Status</th>
+                      <th className="text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredVendas.map(item => (
+                      <tr key={item.id}>
+                        <td><strong>{item.numero}</strong></td>
+                        <td>{item.clienteNome}</td>
+                        <td>{new Date(item.data).toLocaleDateString('pt-BR')} {new Date(item.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</td>
+                        <td>
+                          {item.status === 'Entregue' ? (
+                            <span className="badge badge-entregue">Entregue</span>
+                          ) : item.status === 'Cancelado' ? (
+                            <span className="badge badge-cancelado" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--vermelho)' }}>Cancelado</span>
+                          ) : (
+                            <span className="badge badge-pendente">Emitido</span>
+                          )}
+                        </td>
+                        <td className="text-right"><strong>R$ {item.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '24px', color: 'var(--cinza-medio)' }}>
+                  <AlertCircle size={24} style={{ marginBottom: '6px' }} />
+                  <p style={{ margin: 0 }}>Nenhuma venda encontrada.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal de Relatório */}
+            {showReport && (
+              <div className="modal-overlay" onClick={() => setShowReport(false)}>
+                <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                  <div className="modal-header">
+                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.1rem' }}>
+                      <BarChart2 size={18} /> Relatório de Vendas
+                    </h3>
+                    <button onClick={() => setShowReport(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>
+                      <X size={18} />
+                    </button>
+                  </div>
+                  <div className="modal-body">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      
+                      {/* Dia */}
+                      <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: 0, padding: '12px', borderLeft: '4px solid var(--azul-secundario)' }}>
+                        <div>
+                          <div style={{ fontWeight: 'bold', fontSize: '0.95rem', color: 'var(--azul-principal)' }}>Vendas de Hoje</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--cinza-medio)' }}>{reportData.dia.qtd} {reportData.dia.qtd === 1 ? 'venda' : 'vendas'}</div>
+                        </div>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--azul-principal)' }}>
+                          R$ {reportData.dia.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </div>
+                      </div>
+
+                      {/* Mês */}
+                      <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: 0, padding: '12px', borderLeft: '4px solid var(--verde-escuro)' }}>
+                        <div>
+                          <div style={{ fontWeight: 'bold', fontSize: '0.95rem', color: 'var(--verde-escuro)' }}>Vendas do Mês</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--cinza-medio)' }}>{reportData.mes.qtd} {reportData.mes.qtd === 1 ? 'venda' : 'vendas'}</div>
+                        </div>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--verde-escuro)' }}>
+                          R$ {reportData.mes.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </div>
+                      </div>
+
+                      {/* Trimestre */}
+                      <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: 0, padding: '12px', borderLeft: '4px solid var(--amarelo-cta)' }}>
+                        <div>
+                          <div style={{ fontWeight: 'bold', fontSize: '0.95rem', color: '#D97706' }}>Vendas do Trimestre</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--cinza-medio)' }}>{reportData.trimestre.qtd} {reportData.trimestre.qtd === 1 ? 'venda' : 'vendas'}</div>
+                        </div>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#D97706' }}>
+                          R$ {reportData.trimestre.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+                  <div className="modal-footer" style={{ padding: '10px 16px' }}>
+                    <button className="btn btn-secondary" onClick={() => setShowReport(false)} style={{ padding: '6px 12px', fontSize: '0.85rem' }}>
+                      Fechar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      // Renderização Contas a Receber (Admin/Financeiro padrão)
       return (
         <div>
           <h2>Contas a Receber</h2>
-          <div className="card" style={{ padding: '8px' }}>
-            <table className="data-table">
-              <thead>
-                <tr><th>Cliente</th><th>Vencimento</th><th>Valor</th><th>Status</th>{isAdmin && <th>Ação</th>}</tr>
-              </thead>
-              <tbody>
-                {list.map(it => (
-                  <tr key={it.id} style={{ opacity: it.pago ? 0.6 : 1 }}>
-                    <td><strong>{it.cliente}</strong><br/><small>Ref: {it.ref}</small></td>
-                    <td>{new Date(it.vencimento).toLocaleDateString('pt-BR')}</td>
-                    <td>R$ {it.valor.toFixed(2)}</td>
-                    <td><span className={`badge ${it.pago ? 'badge-entregue' : 'badge-pendente'}`}>{it.pago ? 'Pago' : 'Aberto'}</span></td>
-                    {isAdmin && <td>{!it.pago && <button className="btn btn-cta" onClick={() => pay(it)} style={{ padding: '4px 8px', fontSize: '0.75rem' }}>Receber</button>}</td>}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          
+          {/* Busca */}
+          <div style={{ position: 'relative', marginBottom: '16px' }}>
+            <input
+              type="text"
+              className="form-control"
+              placeholder="Pesquisar por cliente ou ref..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{ paddingLeft: '36px' }}
+            />
+            <Search size={16} style={{ position: 'absolute', left: '10px', top: '13px', color: 'var(--cinza-medio)' }} />
+          </div>
+
+          <div className="card" style={{ padding: '8px', overflowX: 'auto' }}>
+            {filteredInstallments.length > 0 ? (
+              <table className="data-table">
+                <thead>
+                  <tr><th>Cliente</th><th>Vencimento</th><th>Valor</th><th>Status</th>{isAdmin && <th>Ação</th>}</tr>
+                </thead>
+                <tbody>
+                  {filteredInstallments.map(it => (
+                    <tr key={it.id} style={{ opacity: it.pago ? 0.6 : 1 }}>
+                      <td><strong>{it.cliente}</strong><br/><small>Ref: {it.ref}</small></td>
+                      <td>{new Date(it.vencimento).toLocaleDateString('pt-BR')}</td>
+                      <td>R$ {it.valor.toFixed(2)}</td>
+                      <td><span className={`badge ${it.pago ? 'badge-entregue' : 'badge-pendente'}`}>{it.pago ? 'Pago' : 'Aberto'}</span></td>
+                      {isAdmin && <td>{!it.pago && <button className="btn btn-cta" onClick={() => pay(it)} style={{ padding: '4px 8px', fontSize: '0.75rem' }}>Receber</button>}</td>}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '24px', color: 'var(--cinza-medio)' }}>
+                <AlertCircle size={24} style={{ marginBottom: '6px' }} />
+                <p style={{ margin: 0 }}>Nenhuma parcela encontrada.</p>
+              </div>
+            )}
           </div>
         </div>
       );
@@ -1916,7 +2162,7 @@
             <button onClick={() => setView('novo-pedido')} style={navItemStyle(view === 'novo-pedido')}><ShoppingBag size={18} /><span>Vender</span></button>
             <button onClick={() => setView('entregas')} style={navItemStyle(view === 'entregas')}><Truck size={18} /><span>Entregas</span></button>
             <button onClick={() => setView('estoque')} style={navItemStyle(view === 'estoque')}><Package size={18} /><span>Estoque</span></button>
-            <button onClick={() => setView('financeiro')} style={navItemStyle(view === 'financeiro')}><DollarSign size={18} /><span>Contas</span></button>
+            <button onClick={() => setView('financeiro')} style={navItemStyle(view === 'financeiro')}><DollarSign size={18} /><span>{user && user.perfil === 'Vendedor' ? 'Vendas' : 'Contas'}</span></button>
             {user && user.perfil === 'Administrador' && (
               <button onClick={() => setView('configuracoes')} style={navItemStyle(view === 'configuracoes')}><SettingsIcon size={18} /><span>Config</span></button>
             )}
