@@ -362,6 +362,76 @@
       }
     }
 
+    function base64ToBlob(base64Str) {
+      if (!base64Str) return null;
+      const mimeMatch = base64Str.match(/^data:([^;]+);base64,/);
+      const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+      const base64Data = base64Str.replace(/^data:[^;]+;base64,/, "");
+      
+      try {
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        return new Blob([byteArray], { type: mimeType });
+      } catch (e) {
+        console.error('[Base64 to Blob] Erro ao converter:', e);
+        return null;
+      }
+    }
+
+    async function uploadImageToSupabase(client, imageStr, folder, fileName) {
+      if (!imageStr) return null;
+      if (imageStr.startsWith('http')) return imageStr;
+      if (!imageStr.startsWith('data:') && imageStr.length < 100) return imageStr;
+
+      const blob = base64ToBlob(imageStr);
+      if (!blob) return null;
+
+      const fileExt = blob.type.split('/')[1] || 'jpg';
+      const filePath = `${folder}/${fileName}.${fileExt}`;
+
+      try {
+        const { data: buckets } = await client.storage.listBuckets();
+        const bucketExists = buckets?.some(b => b.name === 'imagens');
+        if (!bucketExists) {
+          console.log('[Supabase Storage] Criando bucket "imagens"...');
+          await client.storage.createBucket('imagens', { public: true });
+        }
+      } catch (e) {
+        console.warn('[Supabase Storage] Não foi possível verificar/criar bucket:', e);
+      }
+
+      console.log(`[Supabase Storage] Enviando arquivo: ${filePath}`);
+      const { error: uploadError } = await client.storage
+        .from('imagens')
+        .upload(filePath, blob, {
+          cacheControl: '3600',
+          upsert: true
+        });
+
+      if (uploadError) {
+        console.error('[Supabase Storage] Erro no envio:', uploadError);
+        try {
+          await client.storage.createBucket('imagens', { public: true });
+          const { error: retryError } = await client.storage
+            .from('imagens')
+            .upload(filePath, blob, {
+              cacheControl: '3600',
+              upsert: true
+            });
+          if (retryError) return null;
+        } catch (err) {
+          return null;
+        }
+      }
+
+      const { data } = client.storage.from('imagens').getPublicUrl(filePath);
+      return data?.publicUrl;
+    }
+
     async function syncQueueToSupabase() {
       const creds = getCredentials();
       if (!creds.supabaseUrl || !creds.supabaseAnonKey) return { success: false, reason: 'Supabase não configurado' };
@@ -384,12 +454,38 @@
             const { error: errPed } = await supabase.from('pedidos').insert(payload.pedido);
             const { error: errItens } = await supabase.from('itens_pedido').insert(payload.itens);
             const { error: errPar } = await supabase.from('parcelas').insert(payload.parcelas);
-            const { error: errAss } = await supabase.from('assinaturas').insert(payload.assinatura);
+            
+            // Upload da assinatura para o Storage
+            let assinaturaUrl = payload.assinatura.imagem;
+            if (assinaturaUrl && (assinaturaUrl.startsWith('data:') || assinaturaUrl.length > 500)) {
+              const uploadedUrl = await uploadImageToSupabase(supabase, assinaturaUrl, 'assinaturas', `pedido_${payload.pedido.id}`);
+              if (uploadedUrl) {
+                assinaturaUrl = uploadedUrl;
+              }
+            }
+            const { error: errAss } = await supabase.from('assinaturas').insert({
+              ...payload.assinatura,
+              imagem: assinaturaUrl
+            });
+
             const { error: errLoc } = await supabase.from('localizacoes').insert(payload.localizacao);
             success = !errPed && !errItens && !errPar && !errAss && !errLoc;
           } else if (actionType === 'CONFIRM_DELIVERY') {
             const { error: errPed } = await supabase.from('pedidos').update({ status: 'Entregue' }).eq('id', payload.pedidoId);
-            const { error: errFoto } = await supabase.from('fotos_entrega').insert(payload.foto);
+            
+            // Upload da foto da entrega para o Storage
+            let fotoUrl = payload.foto.imagem;
+            if (fotoUrl && (fotoUrl.startsWith('data:') || fotoUrl.length > 500)) {
+              const uploadedUrl = await uploadImageToSupabase(supabase, fotoUrl, 'entregas', `pedido_${payload.foto.pedido_id}`);
+              if (uploadedUrl) {
+                fotoUrl = uploadedUrl;
+              }
+            }
+            const { error: errFoto } = await supabase.from('fotos_entrega').insert({
+              ...payload.foto,
+              imagem: fotoUrl
+            });
+
             const { error: errLoc } = await supabase.from('localizacoes').insert(payload.localizacao);
             success = !errPed && !errFoto && !errLoc;
           } else if (actionType === 'CANCEL_ORDER') {

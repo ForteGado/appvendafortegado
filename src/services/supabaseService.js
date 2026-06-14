@@ -88,6 +88,78 @@ export async function syncQueueToSupabase() {
   return { success: true, processed: processedCount };
 }
 
+// --- Métodos Auxiliares de Conversão e Upload de Imagens ---
+
+function base64ToBlob(base64Str) {
+  if (!base64Str) return null;
+  const mimeMatch = base64Str.match(/^data:([^;]+);base64,/);
+  const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+  const base64Data = base64Str.replace(/^data:[^;]+;base64,/, "");
+  
+  try {
+    const byteCharacters = atob(base64Data);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    return new Blob([byteArray], { type: mimeType });
+  } catch (e) {
+    console.error('[Base64 to Blob] Erro ao converter:', e);
+    return null;
+  }
+}
+
+async function uploadImageToSupabase(client, imageStr, folder, fileName) {
+  if (!imageStr) return null;
+  if (imageStr.startsWith('http')) return imageStr;
+  if (!imageStr.startsWith('data:') && imageStr.length < 100) return imageStr;
+
+  const blob = base64ToBlob(imageStr);
+  if (!blob) return null;
+
+  const fileExt = blob.type.split('/')[1] || 'jpg';
+  const filePath = `${folder}/${fileName}.${fileExt}`;
+
+  try {
+    const { data: buckets } = await client.storage.listBuckets();
+    const bucketExists = buckets?.some(b => b.name === 'imagens');
+    if (!bucketExists) {
+      console.log('[Supabase Storage] Criando bucket "imagens"...');
+      await client.storage.createBucket('imagens', { public: true });
+    }
+  } catch (e) {
+    console.warn('[Supabase Storage] Não foi possível verificar/criar bucket:', e);
+  }
+
+  console.log(`[Supabase Storage] Enviando arquivo: ${filePath}`);
+  const { error: uploadError } = await client.storage
+    .from('imagens')
+    .upload(filePath, blob, {
+      cacheControl: '3600',
+      upsert: true
+    });
+
+  if (uploadError) {
+    console.error('[Supabase Storage] Erro no envio:', uploadError);
+    try {
+      await client.storage.createBucket('imagens', { public: true });
+      const { error: retryError } = await client.storage
+        .from('imagens')
+        .upload(filePath, blob, {
+          cacheControl: '3600',
+          upsert: true
+        });
+      if (retryError) return null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  const { data } = client.storage.from('imagens').getPublicUrl(filePath);
+  return data?.publicUrl;
+}
+
 // --- Métodos de sincronização individual ---
 
 async function syncCreateOrder(client, payload) {
@@ -138,10 +210,18 @@ async function syncCreateOrder(client, payload) {
   }
 
   // 4. Inserir Assinatura
+  let assinaturaUrl = payload.assinatura.imagem;
+  if (assinaturaUrl && (assinaturaUrl.startsWith('data:') || assinaturaUrl.length > 500)) {
+    const uploadedUrl = await uploadImageToSupabase(client, assinaturaUrl, 'assinaturas', `pedido_${payload.pedido.id}`);
+    if (uploadedUrl) {
+      assinaturaUrl = uploadedUrl;
+    }
+  }
+
   const { error: errAss } = await client.from('assinaturas').insert({
     id: payload.assinatura.id,
     pedido_id: payload.assinatura.pedido_id,
-    imagem: payload.assinatura.imagem
+    imagem: assinaturaUrl
   });
   if (errAss) {
     console.error('[Supabase Sync] Erro ao criar assinatura no Supabase:', errAss);
@@ -191,10 +271,18 @@ async function syncConfirmDelivery(client, payload) {
   }
 
   // 2. Inserir Foto da entrega
+  let fotoUrl = payload.foto.imagem;
+  if (fotoUrl && (fotoUrl.startsWith('data:') || fotoUrl.length > 500)) {
+    const uploadedUrl = await uploadImageToSupabase(client, fotoUrl, 'entregas', `pedido_${payload.foto.pedido_id}`);
+    if (uploadedUrl) {
+      fotoUrl = uploadedUrl;
+    }
+  }
+
   const { error: errFoto } = await client.from('fotos_entrega').insert({
     id: payload.foto.id,
     pedido_id: payload.foto.pedido_id,
-    imagem: payload.foto.imagem
+    imagem: fotoUrl
   });
   if (errFoto) {
     console.error('[Supabase Sync] Erro ao inserir foto da entrega no Supabase:', errFoto);
@@ -349,6 +437,12 @@ async function syncUpdateProductPrice(client, payload) {
 
 async function syncUpdateProduct(client, payload) {
   const { id, ...updates } = payload;
+  if (updates.imagem && (updates.imagem.startsWith('data:') || updates.imagem.length > 500)) {
+    const uploadedUrl = await uploadImageToSupabase(client, updates.imagem, 'produtos', `prod_${id}`);
+    if (uploadedUrl) {
+      updates.imagem = uploadedUrl;
+    }
+  }
   const { error } = await client.from('produtos').update(updates).eq('id', id);
   if (error) {
     console.error('[Supabase Sync] Erro ao atualizar dados do produto:', error);
@@ -357,13 +451,21 @@ async function syncUpdateProduct(client, payload) {
 }
 
 async function syncCreateProduct(client, payload) {
+  let imagemUrl = payload.imagem || null;
+  if (imagemUrl && (imagemUrl.startsWith('data:') || imagemUrl.length > 500)) {
+    const uploadedUrl = await uploadImageToSupabase(client, imagemUrl, 'produtos', `prod_${payload.id}`);
+    if (uploadedUrl) {
+      imagemUrl = uploadedUrl;
+    }
+  }
+
   const { error } = await client.from('produtos').insert({
     id: payload.id,
     codigo: payload.codigo,
     nome: payload.nome,
     unidade: payload.unidade,
     preco: payload.preco,
-    imagem: payload.imagem || null,
+    imagem: imagemUrl,
     descricao: payload.descricao || null
   });
   if (error) {
@@ -384,6 +486,12 @@ async function syncCreateProduct(client, payload) {
 
 async function syncUpdateCompany(client, payload) {
   const { id, ...updates } = payload;
+  if (updates.logotipo && (updates.logotipo.startsWith('data:') || updates.logotipo.length > 500)) {
+    const uploadedUrl = await uploadImageToSupabase(client, updates.logotipo, 'empresas', `logo_${id}`);
+    if (uploadedUrl) {
+      updates.logotipo = uploadedUrl;
+    }
+  }
   const { error } = await client.from('empresas').update(updates).eq('id', id);
   if (error) {
     console.error('[Supabase Sync] Erro ao atualizar empresa:', error);
@@ -404,6 +512,13 @@ export async function saveCompanyToSupabase(empresaData) {
 
   const { id, ...fields } = empresaData;
   if (!id) return { success: false, reason: 'ID da empresa não encontrado.' };
+
+  if (fields.logotipo && (fields.logotipo.startsWith('data:') || fields.logotipo.length > 500)) {
+    const uploadedUrl = await uploadImageToSupabase(client, fields.logotipo, 'empresas', `logo_${id}`);
+    if (uploadedUrl) {
+      fields.logotipo = uploadedUrl;
+    }
+  }
 
   // Tenta UPDATE primeiro
   const { data: existing, error: fetchErr } = await client
@@ -441,6 +556,14 @@ export async function saveProductToSupabase(produtoData) {
   const client = getSupabaseClient();
   if (!client) return { success: false, reason: 'Supabase não configurado.' };
 
+  let imagemUrl = produtoData.imagem || null;
+  if (imagemUrl && (imagemUrl.startsWith('data:') || imagemUrl.length > 500)) {
+    const uploadedUrl = await uploadImageToSupabase(client, imagemUrl, 'produtos', `prod_${produtoData.id}`);
+    if (uploadedUrl) {
+      imagemUrl = uploadedUrl;
+    }
+  }
+
   // Campos de produto aceitos pelo Supabase
   const payload = {
     id: produtoData.id,
@@ -448,7 +571,7 @@ export async function saveProductToSupabase(produtoData) {
     nome: produtoData.nome,
     unidade: produtoData.unidade,
     preco: Number(produtoData.preco),
-    imagem: produtoData.imagem || null,
+    imagem: imagemUrl,
     descricao: produtoData.descricao || null
   };
 

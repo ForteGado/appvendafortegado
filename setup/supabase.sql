@@ -153,3 +153,32 @@ VALUES
 (4, 12, 2, 15),
 (5, 0, 0, 5)
 ON CONFLICT (produto_id) DO NOTHING;
+
+-- =============================================================================
+-- CONFIGURAÇÃO DO BUCKET DE STORAGE PARA IMAGENS
+-- =============================================================================
+
+-- Criar bucket de imagens se não existir
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('imagens', 'imagens', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Remover políticas se já existirem
+DROP POLICY IF EXISTS "Permitir leitura publica de imagens" ON storage.objects;
+DROP POLICY IF EXISTS "Permitir insercao de imagens" ON storage.objects;
+DROP POLICY IF EXISTS "Permitir atualizacao de imagens" ON storage.objects;
+DROP POLICY IF EXISTS "Permitir delecao de imagens" ON storage.objects;
+
+-- Criar políticas de acesso irrestrito para o bucket 'imagens' na tabela storage.objects
+CREATE POLICY "Permitir leitura publica de imagens" ON storage.objects 
+  FOR SELECT USING (bucket_id = 'imagens');
+
+CREATE POLICY "Permitir insercao de imagens" ON storage.objects 
+  FOR INSERT WITH CHECK (bucket_id = 'imagens');
+
+CREATE POLICY "Permitir atualizacao de imagens" ON storage.objects 
+  FOR UPDATE USING (bucket_id = 'imagens') WITH CHECK (bucket_id = 'imagens');
+
+CREATE POLICY "Permitir delecao de imagens" ON storage.objects 
+  FOR DELETE USING (bucket_id = 'imagens');
+
