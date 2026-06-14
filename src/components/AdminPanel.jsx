@@ -3,11 +3,12 @@ import {
   Save, RefreshCw, CheckCircle,
   DollarSign, Users, Package, Building2,
   Edit3, X, Plus, ShieldCheck, AlertTriangle,
-  Upload, Trash2, Camera
+  Upload, Trash2, Camera, FileText
 } from 'lucide-react';
 import {
   getDb, saveDb,
-  updateProductPriceLocal, updateProductLocal, createProductLocal, deleteProductLocal, addToSyncQueue
+  updateProductPriceLocal, updateProductLocal, createProductLocal, deleteProductLocal, addToSyncQueue,
+  getLocalDateString
 } from '../services/db';
 import { saveCompanyToSupabase, saveProductToSupabase, deleteProductFromSupabase, saveStockToSupabase } from '../services/supabaseService';
 
@@ -448,6 +449,133 @@ function UsuariosTab() {
     return () => window.removeEventListener('fortegado_db_update', reload);
   }, []);
 
+  const handlePrintSellerDailyReport = (vendedor) => {
+    const db = getDb();
+    const empresa = db.empresas?.[0] || { nome: 'Forte Gado', logotipo: '🐂' };
+    
+    // Filtrar pedidos do vendedor feitos hoje (que não estejam cancelados)
+    const todayStr = getLocalDateString(new Date());
+    const salesToday = db.pedidos.filter(p => {
+      const pDateStr = getLocalDateString(new Date(p.data));
+      return p.vendedor_id === vendedor.id && pDateStr === todayStr && p.status !== 'Cancelado';
+    });
+
+    const totalSales = salesToday.reduce((acc, p) => acc + p.total, 0);
+
+    // Mapear os clientes correspondentes
+    const salesWithClient = salesToday.map(p => {
+      const client = db.clientes.find(c => c.id === p.cliente_id) || {};
+      return {
+        ...p,
+        clienteNome: client.nome || 'Cliente Desconhecido',
+        clienteCidade: client.cidade || 'N/A'
+      };
+    });
+
+    // Abrir janela de impressão
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Forte Gado - Vendas do Dia - ${vendedor.nome}</title>
+          <style>
+            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; padding: 20px; }
+            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #002E73; padding-bottom: 15px; margin-bottom: 20px; }
+            .logo { font-size: 24px; font-weight: bold; color: #002E73; display: flex; align-items: center; gap: 8px; }
+            .title { text-align: right; }
+            .title h1 { margin: 0; font-size: 20px; color: #002E73; }
+            .title p { margin: 5px 0 0 0; font-size: 12px; color: #666; }
+            .summary-card { border: 1px solid #ddd; border-radius: 6px; padding: 16px; background: #f9f9f9; border-left: 4px solid #002E73; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+            .card-title { font-size: 11px; text-transform: uppercase; color: #666; font-weight: bold; }
+            .card-value { font-size: 18px; font-weight: bold; color: #002E73; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            th { background-color: #002E73; color: white; padding: 8px 10px; text-align: left; font-size: 12px; }
+            td { padding: 8px 10px; border-bottom: 1px solid #ddd; font-size: 11px; }
+            tr:nth-child(even) { background-color: #fcfcfc; }
+            .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: bold; }
+            .badge-entregue { background-color: #DEF7EC; color: #03543F; }
+            .badge-emitido { background-color: #E1EFFE; color: #1E429F; }
+            .footer { margin-top: 30px; text-align: center; font-size: 10px; color: #999; border-top: 1px solid #eee; padding-top: 10px; }
+            .text-right { text-align: right; }
+            @media print {
+              body { padding: 0; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="logo">
+              ${empresa.logotipo && empresa.logotipo.startsWith('data:') ? `
+                <img src="${empresa.logotipo}" alt="Logo" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover;" />
+              ` : `
+                <span>${empresa.logotipo || '🐂'}</span>
+              `}
+              <span>${empresa.nome || 'Forte Gado'}</span>
+            </div>
+            <div class="title">
+              <h1>Relatório Diário de Vendas</h1>
+              <p>Vendedor: <strong>${vendedor.nome}</strong> | Data: ${new Date().toLocaleDateString('pt-BR')}</p>
+            </div>
+          </div>
+
+          <div class="summary-card">
+            <div>
+              <div class="card-title">Total Vendido Hoje</div>
+              <div style="font-size: 11px; color: #666; margin-top: 4px;">Quantidade de Vendas: <strong>${salesToday.length}</strong></div>
+            </div>
+            <div class="card-value">R$ ${totalSales.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Nº Pedido</th>
+                <th>Cliente (Comprador)</th>
+                <th>Cidade</th>
+                <th>Hora</th>
+                <th>Status</th>
+                <th class="text-right">Valor Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${salesWithClient.length > 0 ? salesWithClient.map(p => `
+                <tr>
+                  <td><strong>${p.numero}</strong></td>
+                  <td>${p.clienteNome}</td>
+                  <td>${p.clienteCidade}</td>
+                  <td>${new Date(p.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</td>
+                  <td>
+                    <span class="badge ${p.status === 'Entregue' ? 'badge-entregue' : 'badge-emitido'}">
+                      ${p.status}
+                    </span>
+                  </td>
+                  <td class="text-right"><strong>R$ ${p.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong></td>
+                </tr>
+              `).join('') : `
+                <tr>
+                  <td colspan="6" style="text-align: center; color: #999; padding: 20px;">
+                    Nenhuma venda realizada por este vendedor hoje.
+                  </td>
+                </tr>
+              `}
+            </tbody>
+          </table>
+
+          <div class="footer">
+            ${empresa.nome || 'Forte Gado'} © 2026 - Relatório gerencial de controle diário de vendas por vendedor.
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            }
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   const saveUser = (id) => {
     const db = getDb();
     const idx = db.usuarios.findIndex(u => u.id === id);
@@ -533,9 +661,31 @@ function UsuariosTab() {
                       <button onClick={() => saveUser(u.id)} style={btnGreen}><Save size={14} /> Salvar</button>
                       <button onClick={() => setEditId(null)} style={btnOutline}><X size={14} /></button>
                     </div>
-                    : <button onClick={() => { setEditId(u.id); setEditData({ nome: u.nome, email: u.email, perfil: u.perfil }); }} style={btnEdit}>
-                      <Edit3 size={14} /> Editar
-                    </button>}
+                    : <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
+                      <button onClick={() => { setEditId(u.id); setEditData({ nome: u.nome, email: u.email, perfil: u.perfil }); }} style={btnEdit}>
+                        <Edit3 size={14} /> Editar
+                      </button>
+                      {u.perfil === 'Vendedor' && (
+                        <button
+                          onClick={() => handlePrintSellerDailyReport(u)}
+                          style={{
+                            ...btnOutline,
+                            borderColor: 'var(--azul-principal)',
+                            color: 'var(--azul-principal)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '4px 8px',
+                            fontSize: '0.75rem',
+                            fontWeight: 'bold',
+                            backgroundColor: 'transparent'
+                          }}
+                          title="Relatório de Vendas do Dia"
+                        >
+                          <FileText size={14} /> PDF
+                        </button>
+                      )}
+                    </div>}
                 </td>
               </tr>
             ))}
