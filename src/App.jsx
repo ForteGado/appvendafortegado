@@ -11,6 +11,7 @@ import AdminPanel from './components/AdminPanel';
 import OfflineIndicator from './components/OfflineIndicator';
 import Login from './components/Login';
 import Settings from './components/Settings';
+import AdminSalesManager from './components/AdminSalesManager';
 
 import { getDb, getCredentials, saveCredentials } from './services/db';
 import { downloadDataFromSupabase } from './services/supabaseService';
@@ -139,7 +140,13 @@ export default function App() {
 
         {/* Roteador de Telas */}
         {view === 'dashboard' && <Dashboard setView={setView} />}
-        {view === 'novo-pedido' && <OrderForm setView={setView} />}
+        {view === 'novo-pedido' && (
+          currentUser?.perfil === 'Administrador' ? (
+            <AdminSalesManager />
+          ) : (
+            <OrderForm setView={setView} />
+          )
+        )}
         {view === 'entregas' && <Deliveries />}
         {view === 'estoque' && <StockManager />}
         {view === 'financeiro' && <Financial />}
