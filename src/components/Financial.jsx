@@ -198,7 +198,7 @@ export default function Financial() {
           <style>
             body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; padding: 20px; }
             .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #002E73; padding-bottom: 15px; margin-bottom: 20px; }
-            .logo { font-size: 24px; font-weight: bold; color: #002E73; }
+            .logo { font-size: 24px; font-weight: bold; color: #002E73; display: flex; align-items: center; gap: 8px; }
             .title { text-align: right; }
             .title h1 { margin: 0; font-size: 20px; color: #002E73; }
             .title p { margin: 5px 0 0 0; font-size: 12px; color: #666; }
@@ -225,7 +225,14 @@ export default function Financial() {
         </head>
         <body>
           <div class="header">
-            <div class="logo">🐂 ${empresa.nome || 'Forte Gado'}</div>
+            <div class="logo">
+              ${empresa.logotipo && empresa.logotipo.startsWith('data:') ? `
+                <img src="${empresa.logotipo}" alt="Logo" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover;" />
+              ` : `
+                <span>${empresa.logotipo || '🐂'}</span>
+              `}
+              <span>${empresa.nome || 'Forte Gado'}</span>
+            </div>
             <div class="title">
               <h1>Relatório de Vendas e Comissões</h1>
               <p>Vendedor: <strong>${user.nome}</strong> | Data de Emissão: ${new Date().toLocaleDateString('pt-BR')}</p>
