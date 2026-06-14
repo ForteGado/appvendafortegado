@@ -174,7 +174,7 @@ export default function App() {
           style={navItemStyle(view === 'novo-pedido')}
         >
           <ShoppingBag size={20} />
-          <span>Vender</span>
+          <span>{currentUser?.perfil === 'Administrador' ? 'Vendas' : 'Vender'}</span>
         </button>
 
         {/* Entregas */}

@@ -2335,7 +2335,7 @@
             zIndex: 100
           }}>
             <button onClick={() => setView('dashboard')} style={navItemStyle(view === 'dashboard')}><Home size={18} /><span>Início</span></button>
-            <button onClick={() => setView('novo-pedido')} style={navItemStyle(view === 'novo-pedido')}><ShoppingBag size={18} /><span>Vender</span></button>
+            <button onClick={() => setView('novo-pedido')} style={navItemStyle(view === 'novo-pedido')}><ShoppingBag size={18} /><span>{user && user.perfil === 'Administrador' ? 'Vendas' : 'Vender'}</span></button>
             <button onClick={() => setView('entregas')} style={navItemStyle(view === 'entregas')}><Truck size={18} /><span>Entregas</span></button>
             <button onClick={() => setView('estoque')} style={navItemStyle(view === 'estoque')}><Package size={18} /><span>Estoque</span></button>
             <button onClick={() => setView('financeiro')} style={navItemStyle(view === 'financeiro')}><DollarSign size={18} /><span>{user && user.perfil === 'Vendedor' ? 'Vendas' : 'Contas'}</span></button>
