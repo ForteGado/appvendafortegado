@@ -456,8 +456,9 @@ export function receiveInstallmentLocal(parcelaId) {
   if (!par) return null;
 
   par.pago = true;
+  par.data_pagamento = new Date().toISOString();
   saveDb(db);
-  addToSyncQueue('RECEIVE_INSTALLMENT', { parcelaId: Number(parcelaId) });
+  addToSyncQueue('RECEIVE_INSTALLMENT', { parcelaId: Number(parcelaId), data_pagamento: par.data_pagamento });
   return par;
 }
 
