@@ -104,77 +104,8 @@ export async function syncQueueToSupabase() {
   return { success: true, processed: processedCount };
 }
 
-// --- Métodos Auxiliares de Conversão e Upload de Imagens ---
-
-function base64ToBlob(base64Str) {
-  if (!base64Str) return null;
-  const mimeMatch = base64Str.match(/^data:([^;]+);base64,/);
-  const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
-  const base64Data = base64Str.replace(/^data:[^;]+;base64,/, "");
-  
-  try {
-    const byteCharacters = atob(base64Data);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
-    return new Blob([byteArray], { type: mimeType });
-  } catch (e) {
-    console.error('[Base64 to Blob] Erro ao converter:', e);
-    return null;
-  }
-}
-
-async function uploadImageToSupabase(client, imageStr, folder, fileName) {
-  if (!imageStr) return null;
-  if (imageStr.startsWith('http')) return imageStr;
-  if (!imageStr.startsWith('data:') && imageStr.length < 100) return imageStr;
-
-  const blob = base64ToBlob(imageStr);
-  if (!blob) return null;
-
-  const fileExt = blob.type.split('/')[1] || 'jpg';
-  const filePath = `${folder}/${fileName}.${fileExt}`;
-
-  try {
-    const { data: buckets } = await client.storage.listBuckets();
-    const bucketExists = buckets?.some(b => b.name === 'imagens');
-    if (!bucketExists) {
-      console.log('[Supabase Storage] Criando bucket "imagens"...');
-      await client.storage.createBucket('imagens', { public: true });
-    }
-  } catch (e) {
-    console.warn('[Supabase Storage] Não foi possível verificar/criar bucket:', e);
-  }
-
-  console.log(`[Supabase Storage] Enviando arquivo: ${filePath}`);
-  const { error: uploadError } = await client.storage
-    .from('imagens')
-    .upload(filePath, blob, {
-      cacheControl: '3600',
-      upsert: true
-    });
-
-  if (uploadError) {
-    console.error('[Supabase Storage] Erro no envio:', uploadError);
-    try {
-      await client.storage.createBucket('imagens', { public: true });
-      const { error: retryError } = await client.storage
-        .from('imagens')
-        .upload(filePath, blob, {
-          cacheControl: '3600',
-          upsert: true
-        });
-      if (retryError) return null;
-    } catch (err) {
-      return null;
-    }
-  }
-
-  const { data } = client.storage.from('imagens').getPublicUrl(filePath);
-  return data?.publicUrl;
-}
+// Imagens são salvas como base64 diretamente nas colunas TEXT do banco.
+// Não há upload para o Supabase Storage — mais simples e confiável.
 
 // --- Métodos de sincronização individual ---
 
@@ -225,19 +156,11 @@ async function syncCreateOrder(client, payload) {
     return { success: false, error: errPar };
   }
 
-  // 4. Inserir Assinatura
-  let assinaturaUrl = payload.assinatura.imagem;
-  if (assinaturaUrl && (assinaturaUrl.startsWith('data:') || assinaturaUrl.length > 500)) {
-    const uploadedUrl = await uploadImageToSupabase(client, assinaturaUrl, 'assinaturas', `pedido_${payload.pedido.id}`);
-    if (uploadedUrl) {
-      assinaturaUrl = uploadedUrl;
-    }
-  }
-
+  // 4. Inserir Assinatura (base64 salvo diretamente na coluna TEXT)
   const { error: errAss } = await client.from('assinaturas').insert({
     id: payload.assinatura.id,
     pedido_id: payload.assinatura.pedido_id,
-    imagem: assinaturaUrl
+    imagem: payload.assinatura.imagem
   });
   if (errAss) {
     console.error('[Supabase Sync] Erro ao criar assinatura no Supabase:', errAss);
@@ -286,19 +209,11 @@ async function syncConfirmDelivery(client, payload) {
     return { success: false, error: errPed };
   }
 
-  // 2. Inserir Foto da entrega
-  let fotoUrl = payload.foto.imagem;
-  if (fotoUrl && (fotoUrl.startsWith('data:') || fotoUrl.length > 500)) {
-    const uploadedUrl = await uploadImageToSupabase(client, fotoUrl, 'entregas', `pedido_${payload.foto.pedido_id}`);
-    if (uploadedUrl) {
-      fotoUrl = uploadedUrl;
-    }
-  }
-
+  // 2. Inserir Foto da entrega (base64 salvo diretamente na coluna TEXT)
   const { error: errFoto } = await client.from('fotos_entrega').insert({
     id: payload.foto.id,
     pedido_id: payload.foto.pedido_id,
-    imagem: fotoUrl
+    imagem: payload.foto.imagem
   });
   if (errFoto) {
     console.error('[Supabase Sync] Erro ao inserir foto da entrega no Supabase:', errFoto);
@@ -457,12 +372,7 @@ async function syncUpdateProductPrice(client, payload) {
 
 async function syncUpdateProduct(client, payload) {
   const { id, ...updates } = payload;
-  if (updates.imagem && (updates.imagem.startsWith('data:') || updates.imagem.length > 500)) {
-    const uploadedUrl = await uploadImageToSupabase(client, updates.imagem, 'produtos', `prod_${id}`);
-    if (uploadedUrl) {
-      updates.imagem = uploadedUrl;
-    }
-  }
+  // Imagem salva como base64 direto na coluna TEXT
   const { error } = await client.from('produtos').update(updates).eq('id', id);
   if (error) {
     console.error('[Supabase Sync] Erro ao atualizar dados do produto:', error);
@@ -472,21 +382,14 @@ async function syncUpdateProduct(client, payload) {
 }
 
 async function syncCreateProduct(client, payload) {
-  let imagemUrl = payload.imagem || null;
-  if (imagemUrl && (imagemUrl.startsWith('data:') || imagemUrl.length > 500)) {
-    const uploadedUrl = await uploadImageToSupabase(client, imagemUrl, 'produtos', `prod_${payload.id}`);
-    if (uploadedUrl) {
-      imagemUrl = uploadedUrl;
-    }
-  }
-
+  // Imagem salva como base64 direto na coluna TEXT
   const { error } = await client.from('produtos').insert({
     id: payload.id,
     codigo: payload.codigo,
     nome: payload.nome,
     unidade: payload.unidade,
     preco: payload.preco,
-    imagem: imagemUrl,
+    imagem: payload.imagem || null,
     descricao: payload.descricao || null
   });
   if (error) {
@@ -507,12 +410,7 @@ async function syncCreateProduct(client, payload) {
 
 async function syncUpdateCompany(client, payload) {
   const { id, ...updates } = payload;
-  if (updates.logotipo && (updates.logotipo.startsWith('data:') || updates.logotipo.length > 500)) {
-    const uploadedUrl = await uploadImageToSupabase(client, updates.logotipo, 'empresas', `logo_${id}`);
-    if (uploadedUrl) {
-      updates.logotipo = uploadedUrl;
-    }
-  }
+  // logotipo salvo como base64 direto na coluna TEXT
   const { error } = await client.from('empresas').update(updates).eq('id', id);
   if (error) {
     console.error('[Supabase Sync] Erro ao atualizar empresa:', error);
@@ -535,26 +433,7 @@ export async function saveCompanyToSupabase(empresaData) {
   const { id, ...fields } = empresaData;
   if (!id) return { success: false, reason: 'ID da empresa não encontrado.' };
 
-  // Tenta fazer upload para o Storage para obter URL pública
-  // Se falhar (sem bucket), salva o base64 diretamente na coluna logotipo
-  if (fields.logotipo && fields.logotipo.startsWith('data:')) {
-    console.log('[Supabase] Tentando enviar logo para Storage...');
-    try {
-      const uploadedUrl = await uploadImageToSupabase(client, fields.logotipo, 'empresas', `logo_${id}`);
-      if (uploadedUrl) {
-        console.log('[Supabase] Logo enviada para Storage:', uploadedUrl);
-        fields.logotipo = uploadedUrl;
-      } else {
-        console.warn('[Supabase] Storage indisponível. Salvando logo como base64 na coluna logotipo.');
-        // Mantém o base64 em fields.logotipo para salvar diretamente no banco
-      }
-    } catch (e) {
-      console.warn('[Supabase] Erro no Storage, salvando base64 direto:', e.message);
-      // Mantém o base64 em fields.logotipo
-    }
-  }
-
-  // Tenta UPDATE primeiro, depois INSERT
+  // Logo salva como base64 diretamente na coluna TEXT logotipo
   const { data: existing, error: fetchErr } = await client
     .from('empresas')
     .select('id')
@@ -571,12 +450,11 @@ export async function saveCompanyToSupabase(empresaData) {
   if (error) {
     console.error('[Supabase] Erro ao salvar empresa:', error);
     if (error.message?.includes('column') || error.code === '42703') {
-      return { success: false, reason: `Coluna ausente no Supabase: ${error.message}. Execute o SQL de migração no Dashboard do Supabase.` };
+      return { success: false, reason: `Coluna ausente: ${error.message}. Execute o SQL de migração no Dashboard do Supabase.` };
     }
     return { success: false, reason: error.message };
   }
 
-  console.log('[Supabase] Empresa salva com sucesso! logotipo:', fields.logotipo?.substring(0, 60));
   return { success: true };
 }
 
@@ -588,27 +466,14 @@ export async function saveProductToSupabase(produtoData) {
   const client = getSupabaseClient();
   if (!client) return { success: false, reason: 'Supabase não configurado.' };
 
-  let imagemUrl = produtoData.imagem || null;
-  if (imagemUrl && imagemUrl.startsWith('data:')) {
-    try {
-      const uploadedUrl = await uploadImageToSupabase(client, imagemUrl, 'produtos', `prod_${produtoData.id}`);
-      if (uploadedUrl) {
-        imagemUrl = uploadedUrl;
-      }
-      // Se uploadedUrl for null, mantém o base64 direto na coluna imagem
-    } catch (e) {
-      console.warn('[Supabase] Storage falhou para produto, salvando base64 direto:', e.message);
-    }
-  }
-
-  // Campos de produto aceitos pelo Supabase
+  // Imagem salva como base64 diretamente na coluna TEXT
   const payload = {
     id: produtoData.id,
     codigo: produtoData.codigo,
     nome: produtoData.nome,
     unidade: produtoData.unidade,
     preco: Number(produtoData.preco),
-    imagem: imagemUrl,
+    imagem: produtoData.imagem || null,
     descricao: produtoData.descricao || null
   };
 

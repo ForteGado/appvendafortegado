@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Save, RefreshCw, CheckCircle, Wifi, WifiOff,
-  DollarSign, Users, Package, Building2, Settings,
+  Save, RefreshCw, CheckCircle,
+  DollarSign, Users, Package, Building2,
   Edit3, X, Plus, ShieldCheck, AlertTriangle,
   Image, Upload, Trash2, Camera
 } from 'lucide-react';
 import {
-  getDb, saveDb, resetDb, getCredentials, saveCredentials,
+  getDb, saveDb,
   updateProductPriceLocal, updateProductLocal, createProductLocal, addToSyncQueue
 } from '../services/db';
 import { saveCompanyToSupabase, saveProductToSupabase } from '../services/supabaseService';
@@ -571,82 +571,6 @@ function EmpresaTab() {
   );
 }
 
-// ─── ABA INTEGRAÇÕES ──────────────────────────────────────────────────────────
-function IntegracoesTab() {
-  const [config, setConfig] = useState({});
-  const [msg, setMsg] = useState(null);
-
-  useEffect(() => { setConfig(getCredentials()); }, []);
-
-  const handleSave = (e) => {
-    e.preventDefault();
-    saveCredentials(config);
-    setMsg({ ok: true, text: 'Configurações de integração salvas!' });
-    setTimeout(() => setMsg(null), 3000);
-  };
-
-  const handleResetDb = () => {
-    if (window.confirm('Tem certeza? Todos os dados serão restaurados para o estado inicial (dados fictícios).')) {
-      resetDb();
-      setMsg({ ok: true, text: 'Banco de dados resetado!' });
-      setTimeout(() => { setMsg(null); window.location.reload(); }, 1000);
-    }
-  };
-
-  return (
-    <div>
-      <h3 style={sectionTitle}><Settings size={18} style={{ color: 'var(--azul-principal)' }} />Integrações e Configurações Técnicas</h3>
-      {msg && <Msg ok={msg.ok} text={msg.text} />}
-
-      <form onSubmit={handleSave}>
-        <div style={{ ...cardSection, borderLeftColor: 'var(--azul-principal)' }}>
-          <div style={subsectionTitle}>🔗 Supabase (Banco de Dados Remoto)</div>
-          <div className="form-group">
-            <label>URL do Projeto Supabase</label>
-            <input type="url" className="form-control" placeholder="https://xxxx.supabase.co" value={config.supabaseUrl || ''} onChange={(e) => setConfig({ ...config, supabaseUrl: e.target.value })} />
-          </div>
-          <div className="form-group">
-            <label>Chave Anon (Anon Key)</label>
-            <input type="password" className="form-control" placeholder="eyJhbGciOi..." value={config.supabaseAnonKey || ''} onChange={(e) => setConfig({ ...config, supabaseAnonKey: e.target.value })} />
-          </div>
-        </div>
-
-        <div style={{ ...cardSection, borderLeftColor: '#34A853', marginTop: '12px' }}>
-          <div style={{ ...subsectionTitle, color: '#34A853' }}>📊 Google Sheets (Relatórios)</div>
-          <div className="form-group">
-            <label>URL do Apps Script</label>
-            <input type="url" className="form-control" placeholder="https://script.google.com/macros/s/.../exec" value={config.googleSheetsUrl || ''} onChange={(e) => setConfig({ ...config, googleSheetsUrl: e.target.value })} />
-            <small style={{ color: 'var(--cinza-medio)', fontSize: '0.75rem' }}>Abas: PEDIDOS, CONTAS A RECEBER, ESTOQUE, VENDAS</small>
-          </div>
-        </div>
-
-        <div style={{ ...cardSection, borderLeftColor: 'var(--amarelo-cta)', marginTop: '12px' }}>
-          <div style={{ ...subsectionTitle, color: 'var(--amarelo-escuro)' }}>⚡ Modo de Operação</div>
-          <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '10px' }}>
-            <input type="checkbox" id="simulateOffline" style={{ width: '20px', height: '20px' }} checked={config.simulateOffline || false} onChange={(e) => setConfig({ ...config, simulateOffline: e.target.checked })} />
-            <label htmlFor="simulateOffline" style={{ cursor: 'pointer', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              {config.simulateOffline ? <WifiOff size={16} color="var(--vermelho-cancelar)" /> : <Wifi size={16} color="var(--verde-agro)" />}
-              Simular Conexão Offline (guardar ações na fila local)
-            </label>
-          </div>
-        </div>
-
-        <button type="submit" className="btn btn-primary" style={{ marginTop: '16px' }}><Save size={18} /> Salvar Configurações</button>
-      </form>
-
-      <div className="card" style={{ borderColor: 'var(--vermelho-suave)', marginTop: '20px', borderLeft: '4px solid var(--vermelho-cancelar)' }}>
-        <h4 style={{ color: 'var(--vermelho-cancelar)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-          <AlertTriangle size={16} /> Zona de Perigo
-        </h4>
-        <p style={{ fontSize: '0.85rem', color: 'var(--cinza-escuro)', marginBottom: '12px' }}>
-          Restaura todas as tabelas para os dados fictícios iniciais. Use apenas para testes.
-        </p>
-        <button type="button" className="btn btn-danger" onClick={handleResetDb}><RefreshCw size={18} /> Resetar Banco de Dados Local</button>
-      </div>
-    </div>
-  );
-}
-
 // ─── Auxiliar Msg ─────────────────────────────────────────────────────────────
 function Msg({ ok, text }) {
   return (
@@ -667,7 +591,6 @@ const TABS = [
   { id: 'produtos', label: 'Produtos', icon: Package },
   { id: 'usuarios', label: 'Usuários', icon: Users },
   { id: 'empresa', label: 'Empresa', icon: Building2 },
-  { id: 'integracoes', label: 'Integrações', icon: Settings },
 ];
 
 export default function AdminPanel({ currentUser }) {
@@ -722,7 +645,6 @@ export default function AdminPanel({ currentUser }) {
         {activeTab === 'produtos' && <ProdutosTab />}
         {activeTab === 'usuarios' && <UsuariosTab />}
         {activeTab === 'empresa' && <EmpresaTab />}
-        {activeTab === 'integracoes' && <IntegracoesTab />}
       </div>
     </div>
   );

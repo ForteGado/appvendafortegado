@@ -10,6 +10,7 @@ import Financial from './components/Financial';
 import AdminPanel from './components/AdminPanel';
 import OfflineIndicator from './components/OfflineIndicator';
 import Login from './components/Login';
+import Settings from './components/Settings';
 
 import { getDb, getCredentials, saveCredentials } from './services/db';
 import { downloadDataFromSupabase } from './services/supabaseService';
@@ -143,6 +144,7 @@ export default function App() {
         {view === 'estoque' && <StockManager />}
         {view === 'financeiro' && <Financial />}
         {view === 'admin' && currentUser?.perfil === 'Administrador' && <AdminPanel currentUser={currentUser} />}
+        {view === 'configuracoes' && <Settings setView={setView} />}
       </main>
 
       {/* Navegação Inferior (Mobile-first, Premium) */}

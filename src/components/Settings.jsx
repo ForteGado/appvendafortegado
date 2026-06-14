@@ -64,49 +64,6 @@ export default function Settings({ setView }) {
 
       <form onSubmit={handleSave} className="card">
         <h3 style={{ fontSize: '1.1rem', marginBottom: '14px', borderBottom: '1px solid var(--cinza-claro)', paddingBottom: '6px' }}>
-          Integrações de Dados
-        </h3>
-
-        {/* Supabase URL */}
-        <div className="form-group">
-          <label>URL do Supabase</label>
-          <input
-            type="url"
-            className="form-control"
-            placeholder="https://xxxx.supabase.co"
-            value={config.supabaseUrl}
-            onChange={(e) => setConfig({ ...config, supabaseUrl: e.target.value })}
-          />
-        </div>
-
-        {/* Supabase Anon Key */}
-        <div className="form-group">
-          <label>Chave Anon do Supabase (Anon Key)</label>
-          <input
-            type="password"
-            className="form-control"
-            placeholder="eyJhbGciOi..."
-            value={config.supabaseAnonKey}
-            onChange={(e) => setConfig({ ...config, supabaseAnonKey: e.target.value })}
-          />
-        </div>
-
-        {/* Google Sheets Apps Script URL */}
-        <div className="form-group">
-          <label>URL do Apps Script (Google Sheets)</label>
-          <input
-            type="url"
-            className="form-control"
-            placeholder="https://script.google.com/macros/s/.../exec"
-            value={config.googleSheetsUrl}
-            onChange={(e) => setConfig({ ...config, googleSheetsUrl: e.target.value })}
-          />
-          <small style={{ color: 'var(--cinza-medio)', fontSize: '0.75rem' }}>
-            Usado para relatórios em tempo real (Abas: PEDIDOS, CONTAS A RECEBER, ESTOQUE, VENDAS).
-          </small>
-        </div>
-
-        <h3 style={{ fontSize: '1.1rem', marginTop: '20px', marginBottom: '14px', borderBottom: '1px solid var(--cinza-claro)', paddingBottom: '6px' }}>
           Controles do Dispositivo e Teste
         </h3>
 
