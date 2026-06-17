@@ -1,11 +1,17 @@
 import React, { useState } from 'react';
-import { User, Lock, LogIn, AlertCircle } from 'lucide-react';
-import { getDb, getCredentials, saveCredentials } from '../services/db';
+import { User, Lock, LogIn, AlertCircle, UserPlus, ArrowLeft, CheckCircle } from 'lucide-react';
+import { getDb, getCredentials, saveCredentials, createUserLocal } from '../services/db';
+import { saveUserToSupabase } from '../services/supabaseService';
 
 export default function Login({ onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [regName, setRegName] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const [empresa, setEmpresa] = useState(() => {
     const db = getDb();
     return db.empresas?.[0] || { nome: 'Forte Gado', logotipo: '🐂' };
@@ -46,6 +52,46 @@ export default function Login({ onLogin }) {
 
     // Notificar App para recarregar
     onLogin();
+  };
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    if (!regName || !regEmail || !regPassword) {
+      setErrorMsg('Por favor, preencha todos os campos obrigatórios.');
+      return;
+    }
+
+    const db = getDb();
+    const emailExists = db.usuarios.some(u => u.email.toLowerCase() === regEmail.trim().toLowerCase());
+    if (emailExists) {
+      setErrorMsg('Este e-mail já está cadastrado no sistema.');
+      return;
+    }
+
+    // Criar vendedor inativo localmente
+    const newUser = {
+      nome: regName.trim(),
+      email: regEmail.trim(),
+      perfil: 'Vendedor',
+      senha: regPassword,
+      ativo: false // Deve ser autorizado pelo Administrador
+    };
+
+    const created = createUserLocal(newUser);
+    
+    // Sincronizar com Supabase
+    const res = await saveUserToSupabase(created);
+
+    setSuccessMsg('✅ Solicitação enviada! Aguarde a autorização do administrador para poder entrar no app.');
+    setIsRegisterMode(false);
+    
+    // Limpar campos
+    setRegName('');
+    setRegEmail('');
+    setRegPassword('');
   };
 
   const handleQuickLogin = (userEmail) => {
@@ -95,48 +141,137 @@ export default function Login({ onLogin }) {
         </div>
 
         {errorMsg && (
-          <div className="alert-box alert-error" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px' }}>
+          <div className="alert-box alert-error" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', marginBottom: '16px' }}>
             <AlertCircle size={16} style={{ flexShrink: 0 }} />
             <span>{errorMsg}</span>
           </div>
         )}
 
-        <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div className="form-group">
-            <label style={{ fontSize: '0.85rem', fontWeight: '700' }}>Identificação por E-mail</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type="email"
-                className="form-control"
-                placeholder="Ex: silva@fortegado.com.br"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                style={{ paddingLeft: '40px', width: '100%' }}
-                required
-              />
-              <User size={18} style={{ position: 'absolute', left: '12px', top: '14px', color: 'var(--cinza-medio)' }} />
-            </div>
+        {successMsg && (
+          <div className="alert-box alert-success" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', marginBottom: '16px', backgroundColor: 'rgba(90, 158, 26, 0.1)', color: 'var(--verde-escuro)', border: '1px solid rgba(90, 158, 26, 0.2)', borderRadius: '6px', fontSize: '0.82rem' }}>
+            <CheckCircle size={16} style={{ flexShrink: 0 }} />
+            <span>{successMsg}</span>
           </div>
+        )}
 
-          <div className="form-group">
-            <label style={{ fontSize: '0.85rem', fontWeight: '700' }}>Senha de Acesso</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type="password"
-                className="form-control"
-                placeholder="Sua senha (se cadastrada)"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                style={{ paddingLeft: '40px', width: '100%' }}
-              />
-              <Lock size={18} style={{ position: 'absolute', left: '12px', top: '14px', color: 'var(--cinza-medio)' }} />
+        {!isRegisterMode ? (
+          /* TELA DE LOGIN */
+          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="form-group">
+              <label style={{ fontSize: '0.85rem', fontWeight: '700' }}>Identificação por E-mail</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="email"
+                  className="form-control"
+                  placeholder="Ex: silva@fortegado.com.br"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  style={{ paddingLeft: '40px', width: '100%' }}
+                  required
+                />
+                <User size={18} style={{ position: 'absolute', left: '12px', top: '14px', color: 'var(--cinza-medio)' }} />
+              </div>
             </div>
-          </div>
 
-          <button type="submit" className="btn btn-primary" style={{ fontWeight: '700', padding: '12px' }}>
-            <LogIn size={18} /> Entrar no App
-          </button>
-        </form>
+            <div className="form-group">
+              <label style={{ fontSize: '0.85rem', fontWeight: '700' }}>Senha de Acesso</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="password"
+                  className="form-control"
+                  placeholder="Sua senha (se cadastrada)"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  style={{ paddingLeft: '40px', width: '100%' }}
+                />
+                <Lock size={18} style={{ position: 'absolute', left: '12px', top: '14px', color: 'var(--cinza-medio)' }} />
+              </div>
+            </div>
+
+            <button type="submit" className="btn btn-primary" style={{ fontWeight: '700', padding: '12px' }}>
+              <LogIn size={18} /> Entrar no App
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setIsRegisterMode(true); setErrorMsg(''); setSuccessMsg(''); }}
+              style={{
+                background: 'none', border: 'none', color: 'var(--azul-principal)',
+                fontSize: '0.82rem', fontWeight: 'bold', cursor: 'pointer',
+                textAlign: 'center', marginTop: '4px', textDecoration: 'underline'
+              }}
+            >
+              Ainda não tem acesso? Solicitar cadastro
+            </button>
+          </form>
+        ) : (
+          /* TELA DE CADASTRO (SOLICITAR ACESSO) */
+          <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="form-group">
+              <label style={{ fontSize: '0.85rem', fontWeight: '700' }}>Nome Completo *</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Seu nome"
+                  value={regName}
+                  onChange={(e) => setRegName(e.target.value)}
+                  style={{ paddingLeft: '40px', width: '100%' }}
+                  required
+                />
+                <User size={18} style={{ position: 'absolute', left: '12px', top: '14px', color: 'var(--cinza-medio)' }} />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label style={{ fontSize: '0.85rem', fontWeight: '700' }}>E-mail de Acesso *</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="email"
+                  className="form-control"
+                  placeholder="Ex: joao@fortegado.com.br"
+                  value={regEmail}
+                  onChange={(e) => setRegEmail(e.target.value)}
+                  style={{ paddingLeft: '40px', width: '100%' }}
+                  required
+                />
+                <User size={18} style={{ position: 'absolute', left: '12px', top: '14px', color: 'var(--cinza-medio)' }} />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label style={{ fontSize: '0.85rem', fontWeight: '700' }}>Senha *</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="password"
+                  className="form-control"
+                  placeholder="Crie uma senha"
+                  value={regPassword}
+                  onChange={(e) => setRegPassword(e.target.value)}
+                  style={{ paddingLeft: '40px', width: '100%' }}
+                  required
+                />
+                <Lock size={18} style={{ position: 'absolute', left: '12px', top: '14px', color: 'var(--cinza-medio)' }} />
+              </div>
+            </div>
+
+            <button type="submit" className="btn btn-success" style={{ fontWeight: '700', padding: '12px', backgroundColor: 'var(--verde-agro)', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', borderRadius: '8px', cursor: 'pointer' }}>
+              <UserPlus size={18} /> Solicitar Cadastro
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setIsRegisterMode(false); setErrorMsg(''); setSuccessMsg(''); }}
+              style={{
+                background: 'none', border: 'none', color: 'var(--cinza-escuro)',
+                fontSize: '0.82rem', fontWeight: '500', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', marginTop: '4px'
+              }}
+            >
+              <ArrowLeft size={14} /> Voltar para o Login
+            </button>
+          </form>
+        )}
 
         {/* Quick select users list */}
         <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid var(--cinza-claro)' }}>
