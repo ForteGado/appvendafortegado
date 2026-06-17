@@ -556,3 +556,48 @@ export function deleteProductLocal(id) {
   return true;
 }
 
+// Cadastrar Novo Usuário (Apenas Administrador)
+export function createUserLocal(userData) {
+  const db = getDb();
+  const nextId = db.usuarios.length > 0 ? Math.max(...db.usuarios.map(u => u.id)) + 1 : 1;
+  const newUser = {
+    id: nextId,
+    nome: userData.nome,
+    email: userData.email,
+    perfil: userData.perfil || 'Vendedor',
+    senha: userData.senha || null,
+    ativo: userData.ativo !== undefined ? userData.ativo : true
+  };
+  db.usuarios.push(newUser);
+  saveDb(db);
+  addToSyncQueue('SAVE_USER', newUser);
+  return newUser;
+}
+
+// Atualizar Usuário (Apenas Administrador)
+export function updateUserLocal(id, updates) {
+  const db = getDb();
+  const user = db.usuarios.find(u => u.id === Number(id));
+  if (user) {
+    const cleanedUpdates = { ...updates };
+    if (!cleanedUpdates.senha) {
+      delete cleanedUpdates.senha;
+    }
+    Object.assign(user, cleanedUpdates);
+    saveDb(db);
+    addToSyncQueue('SAVE_USER', user);
+  }
+  return user;
+}
+
+// Excluir Usuário (Apenas Administrador)
+export function deleteUserLocal(id) {
+  const db = getDb();
+  const userId = Number(id);
+  db.usuarios = db.usuarios.filter(u => u.id !== userId);
+  saveDb(db);
+  addToSyncQueue('DELETE_USER', { id: userId });
+  return true;
+}
+
+

@@ -75,6 +75,10 @@ export async function syncQueueToSupabase() {
         result = await syncDeleteProduct(client, payload);
       } else if (actionType === 'UPDATE_COMPANY') {
         result = await syncUpdateCompany(client, payload);
+      } else if (actionType === 'SAVE_USER') {
+        result = await syncSaveUser(client, payload);
+      } else if (actionType === 'DELETE_USER') {
+        result = await syncDeleteUser(client, payload);
       } else {
         // Tipo desconhecido: remove da fila para não bloquear
         result = { success: true };
@@ -438,6 +442,29 @@ async function syncUpdateCompany(client, payload) {
   return { success: true };
 }
 
+async function syncSaveUser(client, payload) {
+  const { error } = await client.from('usuarios').upsert(payload, { onConflict: 'id' });
+  if (error) {
+    console.error('[Supabase Sync] Erro ao salvar usuário por id, tentando por email:', error);
+    const { error: error2 } = await client.from('usuarios').upsert(payload, { onConflict: 'email' });
+    if (error2) {
+      console.error('[Supabase Sync] Erro ao salvar usuário por email:', error2);
+      return { success: false, error: error2 };
+    }
+  }
+  return { success: true };
+}
+
+async function syncDeleteUser(client, payload) {
+  const { id } = payload;
+  const { error } = await client.from('usuarios').delete().eq('id', Number(id));
+  if (error) {
+    console.error('[Supabase Sync] Erro ao deletar usuário:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+}
+
 // --- Sincronização Direta (Admin — sem fila) ---
 
 /**
@@ -645,3 +672,54 @@ export async function saveStockToSupabase(produtoId, quantidadeAtual, estoqueMin
   }
   return { success: true };
 }
+
+/**
+ * Salva (cria ou atualiza) um usuário no Supabase.
+ * Usado pelo AdminPanel para garantir que usuários criados/editados
+ * persistam no banco de dados e não sejam perdidos ao sincronizar.
+ */
+export async function saveUserToSupabase(userData) {
+  const client = getSupabaseClient();
+  if (!client) return { success: false, reason: 'Supabase não configurado.' };
+
+  const payload = {
+    id: userData.id,
+    nome: userData.nome,
+    email: userData.email,
+    perfil: userData.perfil,
+    ativo: userData.ativo !== undefined ? userData.ativo : true,
+    senha: userData.senha || null
+  };
+
+  const { error } = await client.from('usuarios').upsert(payload, { onConflict: 'id' });
+  if (error) {
+    // Tentar upsert por email caso o id seja conflitante
+    console.error('[Supabase] Erro ao salvar usuário por id, tentando por email:', error);
+    const { error: error2 } = await client.from('usuarios').upsert(
+      { ...payload },
+      { onConflict: 'email' }
+    );
+    if (error2) {
+      console.error('[Supabase] Erro ao salvar usuário por email:', error2);
+      return { success: false, reason: error2.message };
+    }
+  }
+  return { success: true };
+}
+
+/**
+ * Exclui um usuário do Supabase.
+ * Usado pelo AdminPanel para garantir exclusão imediata.
+ */
+export async function deleteUserFromSupabase(id) {
+  const client = getSupabaseClient();
+  if (!client) return { success: false, reason: 'Supabase não configurado.' };
+
+  const { error } = await client.from('usuarios').delete().eq('id', Number(id));
+  if (error) {
+    console.error('[Supabase] Erro ao deletar usuário:', error);
+    return { success: false, reason: error.message };
+  }
+  return { success: true };
+}
+

@@ -8,9 +8,13 @@ import {
 import {
   getDb, saveDb,
   updateProductPriceLocal, updateProductLocal, createProductLocal, deleteProductLocal, addToSyncQueue,
-  getLocalDateString
+  getLocalDateString,
+  createUserLocal, updateUserLocal, deleteUserLocal
 } from '../services/db';
-import { saveCompanyToSupabase, saveProductToSupabase, deleteProductFromSupabase, saveStockToSupabase } from '../services/supabaseService';
+import { 
+  saveCompanyToSupabase, saveProductToSupabase, deleteProductFromSupabase, saveStockToSupabase, saveUserToSupabase,
+  deleteUserFromSupabase
+} from '../services/supabaseService';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (v) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -434,7 +438,7 @@ function ProdutosTab() {
 }
 
 // ─── ABA USUÁRIOS ─────────────────────────────────────────────────────────────
-function UsuariosTab() {
+function UsuariosTab({ currentUser }) {
   const [usuarios, setUsuarios] = useState([]);
   const [editId, setEditId] = useState(null);
   const [editData, setEditData] = useState({});
@@ -576,35 +580,78 @@ function UsuariosTab() {
     printWindow.document.close();
   };
 
-  const saveUser = (id) => {
-    const db = getDb();
-    const idx = db.usuarios.findIndex(u => u.id === id);
-    if (idx === -1) return;
-    db.usuarios[idx] = { ...db.usuarios[idx], ...editData };
-    saveDb(db);
+  const saveUser = async (id) => {
+    const updated = updateUserLocal(id, editData);
     setEditId(null);
-    setMsg({ ok: true, text: 'Usuário atualizado!' });
     reload();
-    setTimeout(() => setMsg(null), 3000);
+    if (updated) {
+      const res = await saveUserToSupabase(updated);
+      if (res.success) {
+        setMsg({ ok: true, text: '✅ Usuário atualizado e sincronizado com Supabase!' });
+      } else {
+        setMsg({ ok: false, text: `⚠️ Salvo localmente. Erro no Supabase: ${res.reason}` });
+      }
+    }
+    setTimeout(() => setMsg(null), 5000);
   };
 
-  const createUser = () => {
+  const createUser = async () => {
     if (!novoUser.nome || !novoUser.email) { setMsg({ ok: false, text: 'Nome e e-mail são obrigatórios.' }); return; }
-    const db = getDb();
-    const nextId = db.usuarios.length > 0 ? Math.max(...db.usuarios.map(u => u.id)) + 1 : 1;
-    db.usuarios.push({ id: nextId, nome: novoUser.nome, email: novoUser.email, perfil: novoUser.perfil, senha: novoUser.senha, ativo: true });
-    saveDb(db);
+    if (!novoUser.senha) { setMsg({ ok: false, text: 'A senha é obrigatória.' }); return; }
+    
+    const created = createUserLocal(novoUser);
     setNovoMode(false);
     setNovoUser({ nome: '', email: '', perfil: 'Vendedor', senha: '' });
-    setMsg({ ok: true, text: 'Usuário criado!' });
     reload();
-    setTimeout(() => setMsg(null), 3000);
+
+    // Sincronizar diretamente com Supabase
+    const res = await saveUserToSupabase(created);
+    if (res.success) {
+      setMsg({ ok: true, text: '✅ Usuário criado e sincronizado com Supabase!' });
+    } else {
+      setMsg({ ok: false, text: `⚠️ Salvo localmente. Erro no Supabase: ${res.reason}` });
+    }
+    setTimeout(() => setMsg(null), 5000);
   };
 
-  const toggleAtivo = (id) => {
+  const toggleAtivo = async (id) => {
     const db = getDb();
     const u = db.usuarios.find(u => u.id === id);
-    if (u) { u.ativo = !u.ativo; saveDb(db); reload(); }
+    if (u) {
+      const updated = updateUserLocal(id, { ativo: !u.ativo });
+      reload();
+      if (updated) {
+        const res = await saveUserToSupabase(updated);
+        if (res.success) {
+          setMsg({ ok: true, text: `✅ Usuário ${updated.ativo ? 'ativado' : 'pausado (inativado)'} no Supabase com sucesso!` });
+        } else {
+          setMsg({ ok: false, text: `⚠️ Status alterado localmente. Erro no Supabase: ${res.reason}` });
+        }
+      }
+      setTimeout(() => setMsg(null), 4000);
+    }
+  };
+
+  const handleDeleteUser = async (id) => {
+    const db = getDb();
+    const u = db.usuarios.find(u => u.id === id);
+    if (!u) return;
+
+    if (!window.confirm(`Tem certeza de que deseja excluir permanentemente o usuário/vendedor "${u.nome}"?`)) {
+      return;
+    }
+
+    deleteUserLocal(id);
+    reload();
+    setMsg({ ok: true, text: 'Usuário removido localmente. Sincronizando com Supabase...' });
+
+    const res = await deleteUserFromSupabase(id);
+    if (res.success) {
+      setMsg({ ok: true, text: '✅ Usuário removido do Supabase com sucesso!' });
+    } else {
+      setMsg({ ok: false, text: `⚠️ Removido localmente. Erro no Supabase: ${res.reason}. A exclusão está na fila offline.` });
+    }
+    setTimeout(() => setMsg(null), 5000);
   };
 
   return (
@@ -633,7 +680,10 @@ function UsuariosTab() {
                 </td>
                 <td style={td}>
                   {editId === u.id
-                    ? <input className="form-control" style={inputSm} value={editData.email || ''} onChange={(e) => setEditData({ ...editData, email: e.target.value })} />
+                    ? <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <input className="form-control" style={inputSm} value={editData.email || ''} onChange={(e) => setEditData({ ...editData, email: e.target.value })} />
+                        <input type="password" className="form-control" style={{ ...inputSm, fontSize: '0.75rem', marginTop: '2px' }} value={editData.senha || ''} onChange={(e) => setEditData({ ...editData, senha: e.target.value })} placeholder="Nova Senha (opcional)" />
+                      </div>
                     : u.email}
                 </td>
                 <td style={td}>
@@ -665,6 +715,11 @@ function UsuariosTab() {
                       <button onClick={() => { setEditId(u.id); setEditData({ nome: u.nome, email: u.email, perfil: u.perfil }); }} style={btnEdit}>
                         <Edit3 size={14} /> Editar
                       </button>
+                      {u.id !== currentUser?.id && (
+                        <button onClick={() => handleDeleteUser(u.id)} style={btnDanger}>
+                          <Trash2 size={14} /> Excluir
+                        </button>
+                      )}
                       {u.perfil === 'Vendedor' && (
                         <button
                           onClick={() => handlePrintSellerDailyReport(u)}
@@ -885,7 +940,7 @@ export default function AdminPanel({ currentUser }) {
       {/* Conteúdo */}
       <div className="card" style={{ minHeight: '300px' }}>
         {activeTab === 'produtos' && <ProdutosTab />}
-        {activeTab === 'usuarios' && <UsuariosTab />}
+        {activeTab === 'usuarios' && <UsuariosTab currentUser={currentUser} />}
         {activeTab === 'empresa' && <EmpresaTab />}
       </div>
     </div>
