@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS public.clientes (
     cidade VARCHAR(100),
     latitude NUMERIC(10, 8),
     longitude NUMERIC(11, 8),
+    limite_credito NUMERIC(10, 2) DEFAULT 0,
+    observacoes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

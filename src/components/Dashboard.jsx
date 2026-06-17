@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Truck, Package, DollarSign, Settings, BarChart2, TrendingUp, AlertTriangle } from 'lucide-react';
+import { ShoppingBag, Truck, Package, DollarSign, Settings, BarChart2, TrendingUp, AlertTriangle, Users } from 'lucide-react';
 import { getDb, getCredentials, getLocalDateString } from '../services/db';
 
 export default function Dashboard({ setView }) {
@@ -137,10 +137,17 @@ export default function Dashboard({ setView }) {
       {/* Atalhos Rápidos */}
       <h3 style={{ fontSize: '1.05rem', marginBottom: '14px', fontWeight: '700' }}>Atalhos do Sistema</h3>
       <div className="shortcuts-grid">
-        <button className="shortcut-btn" onClick={() => setView('novo-pedido')}>
-          <ShoppingBag />
-          <span>Novo Pedido</span>
-        </button>
+        {currentUser && currentUser.perfil === 'Administrador' ? (
+          <button className="shortcut-btn" onClick={() => setView('novo-pedido')}>
+            <TrendingUp />
+            <span>Relatório de Vendas</span>
+          </button>
+        ) : (
+          <button className="shortcut-btn" onClick={() => setView('novo-pedido')}>
+            <ShoppingBag />
+            <span>Novo Pedido</span>
+          </button>
+        )}
 
         <button className="shortcut-btn" onClick={() => setView('entregas')}>
           <Truck />
@@ -155,6 +162,11 @@ export default function Dashboard({ setView }) {
         <button className="shortcut-btn" onClick={() => setView('financeiro')}>
           <DollarSign />
           <span>Financeiro</span>
+        </button>
+
+        <button className="shortcut-btn" onClick={() => setView('clientes')}>
+          <Users />
+          <span>Clientes</span>
         </button>
 
         {currentUser && currentUser.perfil === 'Administrador' && (

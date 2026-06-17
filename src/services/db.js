@@ -15,11 +15,11 @@ const INITIAL_DATA = {
     { id: 2, nome: 'Silva Vendedor', email: 'silva@fortegado.com.br', perfil: 'Vendedor', ativo: true }
   ],
   clientes: [
-    { id: 1, nome: 'Fazenda Bela Vista (Carlos)', nome_fazenda: 'Fazenda Bela Vista', nome_produtor: 'Carlos', cpf_cnpj: '11.222.333/0001-44', telefone: '(34) 98888-2222', endereco: 'Estrada Geral, Zona Rural', cidade: 'Uberaba', latitude: -19.7476, longitude: -47.9392 },
-    { id: 2, nome: 'Agropecuária São José (José)', nome_fazenda: 'Agropecuária São José', nome_produtor: 'José', cpf_cnpj: '22.333.444/0001-55', telefone: '(34) 98777-3333', endereco: 'Av. Brasil, 120, Centro', cidade: 'Sacramento', latitude: -19.7345, longitude: -47.9022 },
-    { id: 3, nome: 'Haras Imperial (Dra. Ana)', nome_fazenda: 'Haras Imperial', nome_produtor: 'Dra. Ana', cpf_cnpj: '33.444.555/0001-66', telefone: '(16) 99666-4444', endereco: 'Rodovia SP-330, Km 310', cidade: 'Ribeirão Preto', latitude: -21.1704, longitude: -47.8103 },
-    { id: 4, nome: 'Fazenda Santa Maria (José)', nome_fazenda: 'Fazenda Santa Maria', nome_produtor: 'José', cpf_cnpj: '44.555.666/0001-77', telefone: '(34) 99555-5555', endereco: 'Vicinal dos Ipês, Km 8', cidade: 'Conquista', latitude: -20.0245, longitude: -47.6432 },
-    { id: 5, nome: 'Recanto Feliz Agro (Sebastião)', nome_fazenda: 'Recanto Feliz Agro', nome_produtor: 'Sebastião', cpf_cnpj: '55.666.777/0001-88', telefone: '(34) 99111-6666', endereco: 'Fazenda Recanto Feliz', cidade: 'Delta', latitude: -20.1456, longitude: -47.7789 }
+    { id: 1, nome: 'Fazenda Bela Vista (Carlos)', nome_fazenda: 'Fazenda Bela Vista', nome_produtor: 'Carlos', cpf_cnpj: '11.222.333/0001-44', telefone: '(34) 98888-2222', endereco: 'Estrada Geral, Zona Rural', cidade: 'Uberaba', latitude: -19.7476, longitude: -47.9392, limite_credito: 0, observacoes: '' },
+    { id: 2, nome: 'Agropecuária São José (José)', nome_fazenda: 'Agropecuária São José', nome_produtor: 'José', cpf_cnpj: '22.333.444/0001-55', telefone: '(34) 98777-3333', endereco: 'Av. Brasil, 120, Centro', cidade: 'Sacramento', latitude: -19.7345, longitude: -47.9022, limite_credito: 0, observacoes: '' },
+    { id: 3, nome: 'Haras Imperial (Dra. Ana)', nome_fazenda: 'Haras Imperial', nome_produtor: 'Dra. Ana', cpf_cnpj: '33.444.555/0001-66', telefone: '(16) 99666-4444', endereco: 'Rodovia SP-330, Km 310', cidade: 'Ribeirão Preto', latitude: -21.1704, longitude: -47.8103, limite_credito: 0, observacoes: '' },
+    { id: 4, nome: 'Fazenda Santa Maria (José)', nome_fazenda: 'Fazenda Santa Maria', nome_produtor: 'José', cpf_cnpj: '44.555.666/0001-77', telefone: '(34) 99555-5555', endereco: 'Vicinal dos Ipês, Km 8', cidade: 'Conquista', latitude: -20.0245, longitude: -47.6432, limite_credito: 0, observacoes: '' },
+    { id: 5, nome: 'Recanto Feliz Agro (Sebastião)', nome_fazenda: 'Recanto Feliz Agro', nome_produtor: 'Sebastião', cpf_cnpj: '55.666.777/0001-88', telefone: '(34) 99111-6666', endereco: 'Fazenda Recanto Feliz', cidade: 'Delta', latitude: -20.1456, longitude: -47.7789, limite_credito: 0, observacoes: '' }
   ],
   produtos: [
     { id: 1, codigo: 'RAC001', nome: 'Ração Gado de Corte Premium', unidade: 'Saco 40kg', preco: 120.00 },
@@ -598,6 +598,18 @@ export function deleteUserLocal(id) {
   saveDb(db);
   addToSyncQueue('DELETE_USER', { id: userId });
   return true;
+}
+
+// Atualizar dados do Cliente (limite_credito, observacoes, etc.)
+export function updateClientLocal(id, updates) {
+  const db = getDb();
+  const client = db.clientes.find(c => c.id === Number(id));
+  if (client) {
+    Object.assign(client, updates);
+    saveDb(db);
+    addToSyncQueue('SAVE_CLIENT', client);
+  }
+  return client;
 }
 
 

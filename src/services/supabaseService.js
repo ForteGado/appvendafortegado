@@ -79,6 +79,8 @@ export async function syncQueueToSupabase() {
         result = await syncSaveUser(client, payload);
       } else if (actionType === 'DELETE_USER') {
         result = await syncDeleteUser(client, payload);
+      } else if (actionType === 'SAVE_CLIENT') {
+        result = await syncSaveClient(client, payload);
       } else {
         // Tipo desconhecido: remove da fila para não bloquear
         result = { success: true };
@@ -363,7 +365,9 @@ async function syncCreateClient(client, payload) {
     cpf_cnpj: payload.cpf_cnpj,
     telefone: payload.telefone,
     endereco: payload.endereco,
-    cidade: payload.cidade
+    cidade: payload.cidade,
+    limite_credito: Number(payload.limite_credito) || 0,
+    observacoes: payload.observacoes || null
   });
   if (error) {
     console.error('[Supabase Sync] Erro ao criar cliente:', error);
@@ -460,6 +464,15 @@ async function syncDeleteUser(client, payload) {
   const { error } = await client.from('usuarios').delete().eq('id', Number(id));
   if (error) {
     console.error('[Supabase Sync] Erro ao deletar usuário:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+}
+
+async function syncSaveClient(client, payload) {
+  const { error } = await client.from('clientes').upsert(payload, { onConflict: 'id' });
+  if (error) {
+    console.error('[Supabase Sync] Erro ao salvar cliente:', error);
     return { success: false, error };
   }
   return { success: true };
@@ -718,6 +731,37 @@ export async function deleteUserFromSupabase(id) {
   const { error } = await client.from('usuarios').delete().eq('id', Number(id));
   if (error) {
     console.error('[Supabase] Erro ao deletar usuário:', error);
+    return { success: false, reason: error.message };
+  }
+  return { success: true };
+}
+
+/**
+ * Salva (cria ou atualiza) um cliente no Supabase.
+ * Usado pelo ClientManager para garantir atualização imediata de crédito e observações.
+ */
+export async function saveClientToSupabase(clientData) {
+  const client = getSupabaseClient();
+  if (!client) return { success: false, reason: 'Supabase não configurado.' };
+
+  const payload = {
+    id: clientData.id,
+    nome: clientData.nome,
+    nome_produtor: clientData.nome_produtor || null,
+    nome_fazenda: clientData.nome_fazenda || null,
+    latitude: clientData.latitude || null,
+    longitude: clientData.longitude || null,
+    cpf_cnpj: clientData.cpf_cnpj || null,
+    telefone: clientData.telefone || null,
+    endereco: clientData.endereco || null,
+    cidade: clientData.cidade || null,
+    limite_credito: Number(clientData.limite_credito) || 0,
+    observacoes: clientData.observacoes || null
+  };
+
+  const { error } = await client.from('clientes').upsert(payload, { onConflict: 'id' });
+  if (error) {
+    console.error('[Supabase] Erro ao salvar cliente:', error);
     return { success: false, reason: error.message };
   }
   return { success: true };

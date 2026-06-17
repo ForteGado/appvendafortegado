@@ -12,6 +12,7 @@ import OfflineIndicator from './components/OfflineIndicator';
 import Login from './components/Login';
 import Settings from './components/Settings';
 import AdminSalesManager from './components/AdminSalesManager';
+import ClientManager from './components/ClientManager';
 
 import { getDb, getCredentials, saveCredentials } from './services/db';
 import { downloadDataFromSupabase } from './services/supabaseService';
@@ -151,6 +152,7 @@ export default function App() {
         {view === 'estoque' && <StockManager />}
         {view === 'financeiro' && <Financial />}
         {view === 'admin' && currentUser?.perfil === 'Administrador' && <AdminPanel currentUser={currentUser} />}
+        {view === 'clientes' && <ClientManager currentUser={currentUser} setView={setView} />}
         {view === 'configuracoes' && <Settings setView={setView} />}
       </main>
 

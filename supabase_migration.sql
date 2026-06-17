@@ -16,12 +16,14 @@ ALTER TABLE IF EXISTS public.produtos
   ADD COLUMN IF NOT EXISTS imagem TEXT,
   ADD COLUMN IF NOT EXISTS descricao TEXT;
 
--- 3. Adicionar campos de localização ao cadastro de clientes (se ausente)
+-- 3. Adicionar campos de localização, crédito e observações ao cadastro de clientes (se ausente)
 ALTER TABLE IF EXISTS public.clientes
   ADD COLUMN IF NOT EXISTS nome_produtor TEXT,
   ADD COLUMN IF NOT EXISTS nome_fazenda TEXT,
   ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION,
-  ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;
+  ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION,
+  ADD COLUMN IF NOT EXISTS limite_credito NUMERIC(10, 2) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS observacoes TEXT;
 
 -- 4. Adicionar coluna de senha à tabela usuarios (se ausente)
 ALTER TABLE IF EXISTS public.usuarios
