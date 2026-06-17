@@ -445,6 +445,7 @@ function UsuariosTab({ currentUser }) {
   const [novoMode, setNovoMode] = useState(false);
   const [novoUser, setNovoUser] = useState({ nome: '', email: '', perfil: 'Vendedor', senha: '' });
   const [msg, setMsg] = useState(null);
+  const pendingUsers = usuarios.filter(u => !u.ativo);
 
   const reload = () => { const db = getDb(); setUsuarios(db.usuarios); };
   useEffect(() => {
@@ -658,6 +659,25 @@ function UsuariosTab({ currentUser }) {
     <div>
       <h3 style={sectionTitle}><Users size={18} style={{ color: 'var(--azul-principal)' }} />Gestão de Usuários e Vendedores</h3>
       {msg && <Msg ok={msg.ok} text={msg.text} />}
+
+      {pendingUsers.length > 0 && (
+        <div style={{
+          backgroundColor: 'rgba(217,119,6,0.1)',
+          border: '1px solid rgba(217,119,6,0.2)',
+          borderRadius: '8px',
+          padding: '10px 14px',
+          marginBottom: '14px',
+          color: '#b45309',
+          fontSize: '0.85rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          fontWeight: '600'
+        }}>
+          <AlertTriangle size={16} />
+          <span>Há {pendingUsers.length} solicitação(ões) de cadastro pendente(s). Clique no status <strong>"○ Inativo"</strong> do vendedor correspondente para autorizá-lo.</span>
+        </div>
+      )}
 
       <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
         <table style={tableStyle}>
