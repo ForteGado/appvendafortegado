@@ -94,17 +94,6 @@ export default function Login({ onLogin }) {
     setRegPassword('');
   };
 
-  const handleQuickLogin = (userEmail) => {
-    setEmail(userEmail);
-    const db = getDb();
-    const user = db.usuarios.find(u => u.email === userEmail);
-    if (user) {
-      const creds = getCredentials();
-      creds.activeUserId = user.id;
-      saveCredentials(creds);
-      onLogin();
-    }
-  };
 
   return (
     <div style={{
@@ -273,46 +262,7 @@ export default function Login({ onLogin }) {
           </form>
         )}
 
-        {/* Quick select users list */}
-        <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid var(--cinza-claro)' }}>
-          <span style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: 'var(--cinza-medio)', textTransform: 'uppercase', marginBottom: '10px', textAlign: 'center' }}>
-            Acesso Rápido para Teste
-          </span>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <button
-              onClick={() => handleQuickLogin('prado@fortegado.com.br')}
-              style={quickButtonStyle('var(--azul-principal)')}
-            >
-              <strong>Wislley Prado</strong> (Administrador)
-              <span style={{ fontSize: '0.7rem', opacity: 0.8, display: 'block' }}>prado@fortegado.com.br</span>
-            </button>
-
-            <button
-              onClick={() => handleQuickLogin('silva@fortegado.com.br')}
-              style={quickButtonStyle('var(--azul-secundario)')}
-            >
-              <strong>Silva Vendedor</strong> (Vendedor)
-              <span style={{ fontSize: '0.7rem', opacity: 0.8, display: 'block' }}>silva@fortegado.com.br</span>
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );
 }
-
-const quickButtonStyle = (color) => ({
-  background: 'none',
-  border: `1.5px solid ${color}`,
-  borderRadius: '8px',
-  color: color,
-  padding: '8px 12px',
-  fontSize: '0.8rem',
-  cursor: 'pointer',
-  textAlign: 'left',
-  transition: 'all 0.2s',
-  outline: 'none',
-  ':hover': {
-    backgroundColor: 'rgba(10, 46, 115, 0.03)'
-  }
-});
