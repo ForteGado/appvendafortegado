@@ -23,6 +23,10 @@ ALTER TABLE IF EXISTS public.clientes
   ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION,
   ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;
 
+-- 4. Adicionar coluna de senha à tabela usuarios (se ausente)
+ALTER TABLE IF EXISTS public.usuarios
+  ADD COLUMN IF NOT EXISTS senha TEXT;
+
 -- 4. ATIVAR ROW LEVEL SECURITY (RLS) E CRIAR POLÍTICAS DE ACESSO
 -- Novos projetos do Supabase habilitam o RLS automaticamente e o linter aponta erro se as tabelas ficarem públicas sem RLS.
 -- Para resolver o aviso do linter de forma segura, ativamos o RLS e criamos políticas de acesso total para clientes anônimos e autenticados:

@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS public.usuarios (
     email VARCHAR(255) UNIQUE NOT NULL,
     perfil VARCHAR(50) NOT NULL CHECK (perfil IN ('Administrador', 'Vendedor')),
     ativo BOOLEAN DEFAULT true NOT NULL,
+    senha TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

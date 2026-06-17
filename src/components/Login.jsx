@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { User, LogIn, AlertCircle } from 'lucide-react';
+import { User, Lock, LogIn, AlertCircle } from 'lucide-react';
 import { getDb, getCredentials, saveCredentials } from '../services/db';
 
 export default function Login({ onLogin }) {
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [empresa, setEmpresa] = useState(() => {
     const db = getDb();
@@ -29,6 +30,12 @@ export default function Login({ onLogin }) {
 
     if (!user.ativo) {
       setErrorMsg('Este usuário está desativado no sistema.');
+      return;
+    }
+
+    // Validar senha
+    if (user.senha && user.senha !== password) {
+      setErrorMsg('Senha incorreta.');
       return;
     }
 
@@ -108,6 +115,21 @@ export default function Login({ onLogin }) {
                 required
               />
               <User size={18} style={{ position: 'absolute', left: '12px', top: '14px', color: 'var(--cinza-medio)' }} />
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label style={{ fontSize: '0.85rem', fontWeight: '700' }}>Senha de Acesso</label>
+            <div style={{ position: 'relative' }}>
+              <input
+                type="password"
+                className="form-control"
+                placeholder="Sua senha (se cadastrada)"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                style={{ paddingLeft: '40px', width: '100%' }}
+              />
+              <Lock size={18} style={{ position: 'absolute', left: '12px', top: '14px', color: 'var(--cinza-medio)' }} />
             </div>
           </div>
 
