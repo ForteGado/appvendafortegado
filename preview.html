@@ -4,6 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="description" content="Forte Gado - Sistema de Vendas em Campo e Controle de Estoque Físico." />
+  
+  <!-- PWA Meta Tags & Manifest -->
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#002E73" />
+  
+  <!-- Suporte para iOS -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Forte Gado" />
+  <link rel="apple-touch-icon" href="/logo-pwa.jpg" />
+  
   <title>Forte Gado - Vendas &amp; Estoque (Protótipo)</title>
   
   <!-- Estilos CSS Vanilla -->
@@ -2684,6 +2695,17 @@
 
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
+  </script>
+  
+  <!-- Registro do Service Worker -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(reg => console.log('[PWA Preview] Service Worker registrado no escopo:', reg.scope))
+          .catch(err => console.error('[PWA Preview] Erro ao registrar Service Worker:', err));
+      });
+    }
   </script>
 </body>
 </html>

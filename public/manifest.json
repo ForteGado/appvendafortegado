@@ -1,0 +1,18 @@
+{
+  "name": "Forte Gado Premium",
+  "short_name": "Forte Gado",
+  "description": "Forte Gado - Sistema de Vendas em Campo e Controle de Estoque",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#002E73",
+  "theme_color": "#002E73",
+  "icons": [
+    {
+      "src": "/logo-pwa.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}
