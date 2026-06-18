@@ -492,14 +492,32 @@
                     const uploadedUrl = await uploadImageToSupabase(supabase, assinaturaUrl, 'assinaturas', `pedido_${payload.pedido.id}`);
                     if (uploadedUrl) assinaturaUrl = uploadedUrl;
                   }
-                  const { error: errAss } = await supabase.from('assinaturas').insert({
-                    ...payload.assinatura,
-                    imagem: assinaturaUrl
-                  });
                   if (errAss) { lastError = errAss; }
                   else {
                     const { error: errLoc } = await supabase.from('localizacoes').insert(payload.localizacao);
                     if (errLoc) { lastError = errLoc; }
+                    else {
+                      // Atualizar estoque reservado
+                      if (payload.estoqueUpdates) {
+                        for (const it of payload.estoqueUpdates) {
+                          const { data: estData } = await supabase.from('estoque').select('*').eq('produto_id', it.produto_id).maybeSingle();
+                          if (estData) {
+                            await supabase.from('estoque').update({
+                              quantidade_reservada: estData.quantidade_reservada + (it.deltaReservado || 0),
+                              updated_at: new Date().toISOString()
+                            }).eq('produto_id', it.produto_id);
+                          } else {
+                            await supabase.from('estoque').insert({
+                              produto_id: it.produto_id,
+                              quantidade_atual: 0,
+                              quantidade_reservada: it.deltaReservado || 0,
+                              estoque_minimo: 5,
+                              updated_at: new Date().toISOString()
+                            });
+                          }
+                        }
+                      }
+                    }
                   }
                 }
               }
@@ -522,16 +540,86 @@
               else {
                 const { error: errLoc } = await supabase.from('localizacoes').insert(payload.localizacao);
                 if (errLoc) { lastError = errLoc; }
+                else {
+                  // Atualizar estoque (Debitar reservado e baixar atual)
+                  if (payload.estoqueUpdates) {
+                    for (const it of payload.estoqueUpdates) {
+                      const { data: estData } = await supabase.from('estoque').select('*').eq('produto_id', it.produto_id).maybeSingle();
+                      if (estData) {
+                        await supabase.from('estoque').update({
+                          quantidade_reservada: Math.max(0, estData.quantidade_reservada - (it.quantidade || 0)),
+                          quantidade_atual: Math.max(0, estData.quantidade_atual - (it.quantidade || 0)),
+                          updated_at: new Date().toISOString()
+                        }).eq('produto_id', it.produto_id);
+                      } else {
+                        await supabase.from('estoque').insert({
+                          produto_id: it.produto_id,
+                          quantidade_atual: 0,
+                          quantidade_reservada: 0,
+                          estoque_minimo: 5,
+                          updated_at: new Date().toISOString()
+                        });
+                      }
+                    }
+                  }
+                }
               }
             }
             success = !lastError;
           } else if (actionType === 'CANCEL_ORDER') {
             const { error: errPed } = await supabase.from('pedidos').update({ status: 'Cancelado' }).eq('id', payload.pedidoId);
-            if (errPed) lastError = errPed;
+            if (errPed) { lastError = errPed; }
+            else {
+              // Se estava emitido (reservado), libera o estoque
+              if (payload.oldStatus === 'Emitido') {
+                const { data: itens } = await supabase.from('itens_pedido').select('*').eq('pedido_id', payload.pedidoId);
+                if (itens) {
+                  for (const it of itens) {
+                    const { data: estData } = await supabase.from('estoque').select('*').eq('produto_id', it.produto_id).maybeSingle();
+                    if (estData) {
+                      await supabase.from('estoque').update({
+                        quantidade_reservada: Math.max(0, estData.quantidade_reservada - it.quantidade),
+                        updated_at: new Date().toISOString()
+                      }).eq('produto_id', it.produto_id);
+                    } else {
+                      await supabase.from('estoque').insert({
+                        produto_id: it.produto_id,
+                        quantidade_atual: 0,
+                        quantidade_reservada: 0,
+                        estoque_minimo: 5,
+                        updated_at: new Date().toISOString()
+                      });
+                    }
+                  }
+                }
+              }
+            }
             success = !lastError;
           } else if (actionType === 'REOPEN_ORDER') {
             const { error: errPed } = await supabase.from('pedidos').update({ status: 'Emitido' }).eq('id', payload.pedidoId);
-            if (errPed) lastError = errPed;
+            if (errPed) { lastError = errPed; }
+            else {
+              const { data: itens } = await supabase.from('itens_pedido').select('*').eq('pedido_id', payload.pedidoId);
+              if (itens) {
+                for (const it of itens) {
+                  const { data: estData } = await supabase.from('estoque').select('*').eq('produto_id', it.produto_id).maybeSingle();
+                  if (estData) {
+                    await supabase.from('estoque').update({
+                      quantidade_reservada: estData.quantidade_reservada + it.quantidade,
+                      updated_at: new Date().toISOString()
+                    }).eq('produto_id', it.produto_id);
+                  } else {
+                    await supabase.from('estoque').insert({
+                      produto_id: it.produto_id,
+                      quantidade_atual: 0,
+                      quantidade_reservada: it.quantidade,
+                      estoque_minimo: 5,
+                      updated_at: new Date().toISOString()
+                    });
+                  }
+                }
+              }
+            }
             success = !lastError;
           } else if (actionType === 'RECEIVE_INSTALLMENT') {
             const { error: errPar } = await supabase.from('parcelas').update({ pago: true }).eq('id', payload.parcelaId);
@@ -780,7 +868,8 @@
         itens: items,
         parcelas,
         assinatura,
-        localizacao
+        localizacao,
+        estoqueUpdates: orderData.itens.map(it => ({ produto_id: it.produto_id, deltaReservado: it.quantidade }))
       });
 
       return newOrder;
@@ -824,7 +913,8 @@
       addToSyncQueue('CONFIRM_DELIVERY', {
         pedidoId: Number(pedidoId),
         foto,
-        localizacao
+        localizacao,
+        estoqueUpdates: itens.map(it => ({ produto_id: it.produto_id, quantidade: it.quantidade }))
       });
 
       return ped;

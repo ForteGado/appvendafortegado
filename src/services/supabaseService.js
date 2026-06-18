@@ -196,19 +196,28 @@ async function syncCreateOrder(client, payload) {
     return { success: false, error: errLoc };
   }
 
-  // 6. Atualizar estoque reservado
-  for (const it of payload.estoqueUpdates) {
-    const { data: estData, error: errEstSel } = await client.from('estoque').select('*').eq('produto_id', it.produto_id).single();
-    if (errEstSel) {
-      console.error('[Supabase Sync] Erro ao consultar estoque para reserva:', errEstSel);
-    }
-    if (estData) {
-      const { error: errEstUpd } = await client.from('estoque').update({
-        quantidade_reservada: estData.quantidade_reservada + it.deltaReservado,
-        updated_at: new Date().toISOString()
-      }).eq('produto_id', it.produto_id);
-      if (errEstUpd) {
-        console.error('[Supabase Sync] Erro ao atualizar estoque reservado:', errEstUpd);
+  if (payload.estoqueUpdates) {
+    for (const it of payload.estoqueUpdates) {
+      const { data: estData } = await client.from('estoque').select('*').eq('produto_id', it.produto_id).maybeSingle();
+      if (estData) {
+        const { error: errEstUpd } = await client.from('estoque').update({
+          quantidade_reservada: estData.quantidade_reservada + (it.deltaReservado || 0),
+          updated_at: new Date().toISOString()
+        }).eq('produto_id', it.produto_id);
+        if (errEstUpd) {
+          console.error('[Supabase Sync] Erro ao atualizar estoque reservado:', errEstUpd);
+        }
+      } else {
+        const { error: errEstIns } = await client.from('estoque').insert({
+          produto_id: it.produto_id,
+          quantidade_atual: 0,
+          quantidade_reservada: it.deltaReservado || 0,
+          estoque_minimo: 5,
+          updated_at: new Date().toISOString()
+        });
+        if (errEstIns) {
+          console.error('[Supabase Sync] Erro ao criar registro de estoque inicial na reserva:', errEstIns);
+        }
       }
     }
   }
@@ -249,20 +258,29 @@ async function syncConfirmDelivery(client, payload) {
     return { success: false, error: errLoc };
   }
 
-  // 4. Atualizar Estoque (Debitar Reservado e Baixar Atual)
-  for (const it of payload.estoqueUpdates) {
-    const { data: estData, error: errEstSel } = await client.from('estoque').select('*').eq('produto_id', it.produto_id).single();
-    if (errEstSel) {
-      console.error('[Supabase Sync] Erro ao consultar estoque para baixa:', errEstSel);
-    }
-    if (estData) {
-      const { error: errEstUpd } = await client.from('estoque').update({
-        quantidade_reservada: Math.max(0, estData.quantidade_reservada - it.quantidade),
-        quantidade_atual: Math.max(0, estData.quantidade_atual - it.quantidade),
-        updated_at: new Date().toISOString()
-      }).eq('produto_id', it.produto_id);
-      if (errEstUpd) {
-        console.error('[Supabase Sync] Erro ao atualizar estoque na entrega:', errEstUpd);
+  if (payload.estoqueUpdates) {
+    for (const it of payload.estoqueUpdates) {
+      const { data: estData } = await client.from('estoque').select('*').eq('produto_id', it.produto_id).maybeSingle();
+      if (estData) {
+        const { error: errEstUpd } = await client.from('estoque').update({
+          quantidade_reservada: Math.max(0, estData.quantidade_reservada - (it.quantidade || 0)),
+          quantidade_atual: Math.max(0, estData.quantidade_atual - (it.quantidade || 0)),
+          updated_at: new Date().toISOString()
+        }).eq('produto_id', it.produto_id);
+        if (errEstUpd) {
+          console.error('[Supabase Sync] Erro ao atualizar estoque na entrega:', errEstUpd);
+        }
+      } else {
+        const { error: errEstIns } = await client.from('estoque').insert({
+          produto_id: it.produto_id,
+          quantidade_atual: 0,
+          quantidade_reservada: 0,
+          estoque_minimo: 5,
+          updated_at: new Date().toISOString()
+        });
+        if (errEstIns) {
+          console.error('[Supabase Sync] Erro ao criar registro de estoque inicial na entrega:', errEstIns);
+        }
       }
     }
   }
@@ -285,7 +303,7 @@ async function syncCancelOrder(client, payload) {
     }
     if (itens) {
       for (const it of itens) {
-        const { data: estData, error: errEstSel } = await client.from('estoque').select('*').eq('produto_id', it.produto_id).single();
+        const { data: estData } = await client.from('estoque').select('*').eq('produto_id', it.produto_id).maybeSingle();
         if (estData) {
           const { error: errEstUpd } = await client.from('estoque').update({
             quantidade_reservada: Math.max(0, estData.quantidade_reservada - it.quantidade),
@@ -294,6 +312,14 @@ async function syncCancelOrder(client, payload) {
           if (errEstUpd) {
             console.error('[Supabase Sync] Erro ao liberar estoque de pedido cancelado:', errEstUpd);
           }
+        } else {
+          await client.from('estoque').insert({
+            produto_id: it.produto_id,
+            quantidade_atual: 0,
+            quantidade_reservada: 0,
+            estoque_minimo: 5,
+            updated_at: new Date().toISOString()
+          });
         }
       }
     }
@@ -316,7 +342,7 @@ async function syncReopenOrder(client, payload) {
   }
   if (itens) {
     for (const it of itens) {
-      const { data: estData, error: errEstSel } = await client.from('estoque').select('*').eq('produto_id', it.produto_id).single();
+      const { data: estData } = await client.from('estoque').select('*').eq('produto_id', it.produto_id).maybeSingle();
       if (estData) {
         const { error: errEstUpd } = await client.from('estoque').update({
           quantidade_reservada: estData.quantidade_reservada + it.quantidade,
@@ -325,6 +351,14 @@ async function syncReopenOrder(client, payload) {
         if (errEstUpd) {
           console.error('[Supabase Sync] Erro ao reservar estoque na reabertura:', errEstUpd);
         }
+      } else {
+        await client.from('estoque').insert({
+          produto_id: it.produto_id,
+          quantidade_atual: 0,
+          quantidade_reservada: it.quantidade,
+          estoque_minimo: 5,
+          updated_at: new Date().toISOString()
+        });
       }
     }
   }
