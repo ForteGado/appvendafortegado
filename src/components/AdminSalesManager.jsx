@@ -11,8 +11,10 @@ export default function AdminSalesManager() {
 
   const loadInitialData = () => {
     const db = getDb();
-    // Filtrar apenas usuários vendedores
-    const vends = db.usuarios.filter(u => u.perfil === 'Vendedor' && u.ativo);
+    // Filtrar todos os usuários vendedores (ativos e inativos), ordenados alfabeticamente
+    const vends = db.usuarios
+      .filter(u => u.perfil === 'Vendedor')
+      .sort((a, b) => a.nome.localeCompare(b.nome));
     setVendedores(vends);
     if (vends.length > 0) {
       setSelectedVendedorId(vends[0].id);
@@ -214,7 +216,9 @@ export default function AdminSalesManager() {
           >
             {vendedores.length > 0 ? (
               vendedores.map(v => (
-                <option key={v.id} value={v.id}>{v.nome}</option>
+                <option key={v.id} value={v.id}>
+                  {v.nome}{!v.ativo ? ' (Inativo)' : ''}
+                </option>
               ))
             ) : (
               <option value="">Nenhum vendedor cadastrado</option>
