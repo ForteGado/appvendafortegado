@@ -100,7 +100,7 @@ export default function OfflineIndicator() {
       console.log('[Auto-Sync] Iniciando sincronização automática de itens pendentes.');
       handleSync();
     }
-  }, [isOnline, queueCount, syncing]);
+  }, [isOnline, queueCount]);
 
   return (
     <div style={{ margin: '0 0 16px 0' }}>

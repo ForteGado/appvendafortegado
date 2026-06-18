@@ -582,6 +582,21 @@
             const { error: errComp } = await supabase.from('empresas').update(updates).eq('id', id);
             if (errComp) lastError = errComp;
             success = !lastError;
+          } else if (actionType === 'SAVE_USER') {
+            const { error: errUsr } = await supabase.from('usuarios').upsert(payload, { onConflict: 'id' });
+            if (errUsr) {
+              const { error: errUsr2 } = await supabase.from('usuarios').upsert(payload, { onConflict: 'email' });
+              if (errUsr2) lastError = errUsr2;
+            }
+            success = !lastError;
+          } else if (actionType === 'DELETE_USER') {
+            const { error: errUsr } = await supabase.from('usuarios').delete().eq('id', Number(payload.id));
+            if (errUsr) lastError = errUsr;
+            success = !lastError;
+          } else if (actionType === 'SAVE_CLIENT') {
+            const { error: errCli } = await supabase.from('clientes').upsert(payload, { onConflict: 'id' });
+            if (errCli) lastError = errCli;
+            success = !lastError;
           } else {
             // Ignorar desconhecido para evitar travamento da fila
             success = true;
@@ -1148,7 +1163,7 @@
         if (isOnline && queueCount > 0 && !syncing) {
           handleSync();
         }
-      }, [isOnline, queueCount, syncing]);
+      }, [isOnline, queueCount]);
 
       return (
         <div className={`connection-bar ${isOnline ? 'online' : 'offline'}`} style={{ borderRadius: '8px', marginBottom: '14px' }}>
@@ -1899,7 +1914,7 @@
                   window.print();
                   setTimeout(function() { window.close(); }, 500);
                 }
-              </script>
+              <\/script>
             </body>
           </html>
         `);
