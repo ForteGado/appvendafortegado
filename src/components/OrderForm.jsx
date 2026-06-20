@@ -303,12 +303,16 @@ export default function OrderForm({ setView }) {
       }
       const updated = [...cart];
       updated[existingIdx].quantidade += 1;
+      // Recalcular desconto caso haja percentual
+      const pct = updated[existingIdx].desconto_percentual || 0;
+      updated[existingIdx].desconto = Number((updated[existingIdx].quantidade * updated[existingIdx].valor_unitario * (pct / 100)).toFixed(2));
       setCart(updated);
     } else {
       setCart([...cart, {
         produto_id: product.id,
         quantidade: 1,
         valor_unitario: product.preco,
+        desconto_percentual: 0,
         desconto: 0
       }]);
     }
@@ -336,16 +340,21 @@ export default function OrderForm({ setView }) {
 
     const updated = [...cart];
     updated[existingIdx].quantidade = nextQty;
+    // Recalcular desconto mantendo a porcentagem original
+    const pct = updated[existingIdx].desconto_percentual || 0;
+    updated[existingIdx].desconto = Number((nextQty * updated[existingIdx].valor_unitario * (pct / 100)).toFixed(2));
     setCart(updated);
   };
 
-  const updateCartDiscount = (produtoId, discountValue) => {
+  const updateCartDiscountPercentage = (produtoId, pctValue) => {
     const existingIdx = cart.findIndex(it => it.produto_id === produtoId);
     if (existingIdx === -1) return;
 
+    // Garantir limite de 0 a 10%
+    const pct = Math.min(10, Math.max(0, Number(pctValue)));
     const updated = [...cart];
-    const maxDiscount = updated[existingIdx].quantidade * updated[existingIdx].valor_unitario;
-    updated[existingIdx].desconto = Math.min(maxDiscount, Math.max(0, Number(discountValue)));
+    updated[existingIdx].desconto_percentual = pct;
+    updated[existingIdx].desconto = Number((updated[existingIdx].quantidade * updated[existingIdx].valor_unitario * (pct / 100)).toFixed(2));
     setCart(updated);
   };
 
@@ -710,15 +719,21 @@ export default function OrderForm({ setView }) {
                         <div className="cart-item-controls">
                           {/* Desconto */}
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                            <label style={{ fontSize: '0.65rem', fontWeight: 'bold', color: 'var(--cinza-medio)' }}>Desconto R$</label>
-                            <input
-                              type="number"
-                              min="0"
-                              style={{ width: '70px', padding: '4px', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--cinza-claro)' }}
-                              value={item.desconto || ''}
-                              onChange={(e) => updateCartDiscount(item.produto_id, e.target.value)}
-                              placeholder="0,00"
-                            />
+                            <label style={{ fontSize: '0.65rem', fontWeight: 'bold', color: 'var(--cinza-medio)' }}>Desconto</label>
+                            <select
+                              style={{ width: '80px', padding: '4px', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--cinza-claro)', backgroundColor: 'white' }}
+                              value={item.desconto_percentual || 0}
+                              onChange={(e) => updateCartDiscountPercentage(item.produto_id, e.target.value)}
+                            >
+                              {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(pct => (
+                                <option key={pct} value={pct}>{pct}%</option>
+                              ))}
+                            </select>
+                            {item.desconto > 0 && (
+                              <span style={{ fontSize: '0.65rem', color: 'var(--vermelho-cancelar)', fontWeight: 'bold' }}>
+                                -R$ {item.desconto.toFixed(2)}
+                              </span>
+                            )}
                           </div>
 
                           {/* Quantidade */}
