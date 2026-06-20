@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Truck, MapPin, Camera, AlertTriangle, CheckCircle, Navigation, Trash2, RefreshCw } from 'lucide-react';
+import { Truck, MapPin, Camera, AlertTriangle, CheckCircle, Navigation, Trash2, RefreshCw, FileText, History } from 'lucide-react';
 import { getDb, getCredentials, confirmDeliveryLocal, cancelOrderLocal } from '../services/db';
+import { printDeliveryPDF } from '../services/pdfGenerator';
 import CameraCapture from './CameraCapture';
 
 export default function Deliveries() {
   const [deliveries, setDeliveries] = useState([]);
+  const [deliveredOrders, setDeliveredOrders] = useState([]);
+  const [activeTab, setActiveTab] = useState('pending'); // 'pending' | 'delivered'
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [lastConfirmedOrder, setLastConfirmedOrder] = useState(null);
+  const [viewingPastDelivery, setViewingPastDelivery] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   
@@ -23,11 +28,11 @@ export default function Deliveries() {
     const user = db.usuarios.find(u => u.id === Number(creds.activeUserId));
     setIsAdmin(user && user.perfil === 'Administrador');
 
-    // Listar pedidos pendentes de entrega ("Emitido") ou todos se quiser ver histórico
-    const pendingOrders = db.pedidos
+    // Listar pedidos do vendedor ou de todos se admin
+    const allOrders = db.pedidos
       .filter(p => {
         const matchesUser = user && (user.perfil === 'Administrador' || p.vendedor_id === user.id);
-        return p.status === 'Emitido' && matchesUser;
+        return matchesUser;
       })
       .map(p => {
         const client = db.clientes.find(c => c.id === p.cliente_id) || {};
@@ -41,7 +46,8 @@ export default function Deliveries() {
         };
       });
 
-    setDeliveries(pendingOrders);
+    setDeliveries(allOrders.filter(p => p.status === 'Emitido'));
+    setDeliveredOrders(allOrders.filter(p => p.status === 'Entregue'));
   };
 
   useEffect(() => {
@@ -63,7 +69,6 @@ export default function Deliveries() {
     setValidationError('');
 
     if (!navigator.geolocation) {
-      // Fallback elegante
       setTimeout(() => {
         const fallbackLoc = { latitude: -19.7476 + (Math.random() - 0.5) * 0.01, longitude: -47.9392 + (Math.random() - 0.5) * 0.01 };
         setLocation(fallbackLoc);
@@ -82,7 +87,6 @@ export default function Deliveries() {
       },
       (error) => {
         console.warn('Geolocation error, simulating coords:', error);
-        // Coordenadas simuladas de Uberaba - MG
         setTimeout(() => {
           const fallbackLoc = { latitude: -19.7481, longitude: -47.9389 };
           setLocation(fallbackLoc);
@@ -98,7 +102,6 @@ export default function Deliveries() {
     e.preventDefault();
     setValidationError('');
 
-    // Validações obrigatórias conforme PDR
     if (!location) {
       setValidationError('Capture a localização da entrega.');
       return;
@@ -109,7 +112,7 @@ export default function Deliveries() {
       return;
     }
 
-    // Validar se há estoque reservado (Simulação rápida do check do PDR)
+    // Validar se há estoque reservado
     const db = getDb();
     const orderItems = db.itens_pedido.filter(i => i.pedido_id === selectedOrder.id);
     let stockConsistent = true;
@@ -133,11 +136,10 @@ export default function Deliveries() {
       longitude: location.longitude
     });
 
-    setSuccessMsg(`Entrega do pedido ${selectedOrder.numero} confirmada e estoque baixado!`);
+    // Salvar o pedido confirmado para mostrar a tela de sucesso do PDF
+    setLastConfirmedOrder(selectedOrder);
     setSelectedOrder(null);
     loadDeliveries();
-    
-    setTimeout(() => setSuccessMsg(''), 3000);
   };
 
   // Cancelar Pedido (Apenas Admin)
@@ -152,6 +154,25 @@ export default function Deliveries() {
     loadDeliveries();
 
     setTimeout(() => setSuccessMsg(''), 3000);
+  };
+
+  // Obter metadados da entrega passada
+  const getPastDeliveryDetails = (orderId) => {
+    const db = getDb();
+    const photoData = db.fotos_entrega.find(f => f.pedido_id === Number(orderId));
+    const locData = db.localizacoes.find(l => l.pedido_id === Number(orderId) && l.tipo === 'entrega');
+    const items = db.itens_pedido.filter(i => i.pedido_id === Number(orderId));
+    
+    const resolvedItems = items.map(it => {
+      const prod = db.produtos.find(p => p.id === it.produto_id) || {};
+      return { ...it, nome: prod.nome, unidade: prod.unidade };
+    });
+
+    return {
+      photo: photoData ? photoData.imagem : null,
+      gps: locData ? { latitude: locData.latitude, longitude: locData.longitude, data_hora: locData.data_hora } : null,
+      items: resolvedItems
+    };
   };
 
   return (
@@ -178,7 +199,122 @@ export default function Deliveries() {
         </div>
       )}
 
-      {selectedOrder ? (
+      {/* TELA DE SUCESSO PÓS-CONFIRMAÇÃO */}
+      {lastConfirmedOrder ? (
+        <div className="card" style={{ textAlign: 'center', padding: '30px 20px', borderTop: '5px solid var(--verde-escuro)' }}>
+          <CheckCircle size={48} style={{ color: 'var(--verde-escuro)', margin: '0 auto 16px auto' }} />
+          <h3 style={{ fontSize: '1.25rem', color: 'var(--verde-escuro)', marginBottom: '8px', fontWeight: '700' }}>
+            Entrega Confirmada!
+          </h3>
+          <p style={{ fontSize: '0.9rem', color: 'var(--cinza-escuro)', marginBottom: '20px' }}>
+            A entrega do pedido <strong>{lastConfirmedOrder.numero}</strong> foi registrada e a baixa no estoque foi efetuada.
+          </p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '320px', margin: '0 auto' }}>
+            <button 
+              type="button" 
+              className="btn btn-success" 
+              onClick={() => printDeliveryPDF(lastConfirmedOrder.id)}
+              style={{ display: 'inline-flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}
+            >
+              <FileText size={18} /> Imprimir Comprovante (PDF)
+            </button>
+            <button 
+              type="button" 
+              className="btn btn-outline" 
+              onClick={() => {
+                setLastConfirmedOrder(null);
+                setActiveTab('pending');
+              }}
+            >
+              Voltar para Entregas
+            </button>
+          </div>
+        </div>
+      ) : viewingPastDelivery ? (
+        /* DETALHES DE UMA ENTREGA PASSADA */
+        (() => {
+          const details = getPastDeliveryDetails(viewingPastDelivery.id);
+          return (
+            <div className="card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1.5px solid var(--cinza-claro)', paddingBottom: '8px' }}>
+                <h3 style={{ fontSize: '1.1rem', margin: 0 }}>Detalhes da Entrega: {viewingPastDelivery.numero}</h3>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  onClick={() => setViewingPastDelivery(null)}
+                  style={{ width: 'auto', padding: '6px 12px', fontSize: '0.75rem' }}
+                >
+                  Voltar
+                </button>
+              </div>
+
+              <div style={{ marginBottom: '16px', fontSize: '0.85rem', color: 'var(--cinza-escuro)' }}>
+                <p><strong>Cliente:</strong> {viewingPastDelivery.clienteNome}</p>
+                <p><strong>Cidade:</strong> {viewingPastDelivery.clienteCidade}</p>
+                <p><strong>Endereço:</strong> {viewingPastDelivery.clienteEndereco}</p>
+                {details.gps && (
+                  <p style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', marginBottom: '6px' }}>
+                    <strong>GPS da Entrega:</strong> 
+                    <span style={{ color: 'var(--verde-escuro)', fontWeight: '600' }}>
+                      {details.gps.latitude.toFixed(5)}, {details.gps.longitude.toFixed(5)}
+                    </span>
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${details.gps.latitude},${details.gps.longitude}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-outline"
+                      style={{ display: 'inline-flex', width: 'auto', padding: '4px 10px', fontSize: '0.75rem', gap: '4px' }}
+                    >
+                      <Navigation size={12} /> Ver no Mapa
+                    </a>
+                  </p>
+                )}
+                {details.gps && (
+                  <p><strong>Data/Hora Entrega:</strong> {new Date(details.gps.data_hora).toLocaleString('pt-BR')}</p>
+                )}
+                <p><strong>Total Pedido:</strong> R$ {viewingPastDelivery.total.toFixed(2)}</p>
+              </div>
+
+              {/* Itens Entregues */}
+              <div style={{ marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '0.9rem', marginBottom: '8px', fontWeight: 'bold' }}>Itens Entregues</h4>
+                <div style={{ backgroundColor: '#F8FAFC', padding: '10px', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
+                  {details.items.map((it, index) => (
+                    <div key={index} style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', borderBottom: index < details.items.length - 1 ? '1px solid #E2E8F0' : 'none', padding: '6px 0' }}>
+                      <span>{it.nome} ({it.unidade})</span>
+                      <strong>Qtd: {it.quantidade}</strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Foto Comprovante */}
+              <div style={{ marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '0.9rem', marginBottom: '8px', fontWeight: 'bold' }}>Foto Comprovante</h4>
+                {details.photo ? (
+                  <div style={{ borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--cinza-claro)', textAlign: 'center', padding: '8px', backgroundColor: '#F8FAFC' }}>
+                    <img src={details.photo} style={{ maxWidth: '100%', maxHeight: '240px', objectFit: 'contain', borderRadius: '6px' }} alt="Foto comprovante de entrega" />
+                  </div>
+                ) : (
+                  <p style={{ fontSize: '0.8rem', color: 'var(--cinza-medio)', fontStyle: 'italic' }}>Nenhuma foto comprovante capturada.</p>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '24px' }}>
+                <button 
+                  type="button" 
+                  className="btn btn-success" 
+                  onClick={() => printDeliveryPDF(viewingPastDelivery.id)}
+                  style={{ display: 'inline-flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}
+                >
+                  <FileText size={18} /> Reimprimir Comprovante (PDF)
+                </button>
+              </div>
+            </div>
+          );
+        })()
+      ) : selectedOrder ? (
         // FORMULÁRIO DE CONFIRMAÇÃO DE ENTREGA SELECIONADA
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1.5px solid var(--cinza-claro)', paddingBottom: '8px' }}>
@@ -291,44 +427,130 @@ export default function Deliveries() {
 
         </div>
       ) : (
-        // LISTAGEM DE PEDIDOS PENDENTES DE ENTREGA
+        /* LISTAGEM DE PEDIDOS (COM ABAS DE PENDENTES E ENTREGUES) */
         <div>
-          {deliveries.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {deliveries.map(order => (
-                <div 
-                  key={order.id} 
-                  className="card" 
-                  onClick={() => handleSelectOrder(order)}
-                  style={{ cursor: 'pointer', borderLeft: '5px solid var(--azul-secundario)', padding: '16px' }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <span style={{ fontWeight: '800', color: 'var(--azul-principal)' }}>{order.numero}</span>
-                    <span className="badge badge-pendente">Aguardando Entrega</span>
+          {/* Abas */}
+          <div style={{ display: 'flex', borderBottom: '2px solid var(--cinza-claro)', marginBottom: '16px', borderRadius: '8px', overflow: 'hidden' }}>
+            <button
+              onClick={() => setActiveTab('pending')}
+              style={{
+                flex: 1,
+                padding: '10px',
+                border: 'none',
+                background: activeTab === 'pending' ? '#EBF4FF' : '#F8FAFC',
+                borderBottom: activeTab === 'pending' ? '3px solid var(--azul-principal)' : 'none',
+                fontWeight: activeTab === 'pending' ? 'bold' : 'normal',
+                color: activeTab === 'pending' ? 'var(--azul-principal)' : 'var(--cinza-medio)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                fontSize: '0.85rem'
+              }}
+            >
+              <Truck size={14} /> Pendentes ({deliveries.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('delivered')}
+              style={{
+                flex: 1,
+                padding: '10px',
+                border: 'none',
+                background: activeTab === 'delivered' ? '#EAF7EE' : '#F8FAFC',
+                borderBottom: activeTab === 'delivered' ? '3px solid var(--verde-escuro)' : 'none',
+                fontWeight: activeTab === 'delivered' ? 'bold' : 'normal',
+                color: activeTab === 'delivered' ? 'var(--verde-escuro)' : 'var(--cinza-medio)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                fontSize: '0.85rem'
+              }}
+            >
+              <History size={14} /> Histórico ({deliveredOrders.length})
+            </button>
+          </div>
+
+          {activeTab === 'pending' ? (
+            /* LISTA DE PENDENTES */
+            deliveries.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {deliveries.map(order => (
+                  <div 
+                    key={order.id} 
+                    className="card" 
+                    onClick={() => handleSelectOrder(order)}
+                    style={{ cursor: 'pointer', borderLeft: '5px solid var(--azul-secundario)', padding: '16px' }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <span style={{ fontWeight: '800', color: 'var(--azul-principal)' }}>{order.numero}</span>
+                      <span className="badge badge-pendente">Aguardando Entrega</span>
+                    </div>
+                    <div style={{ fontSize: '0.9rem', color: 'var(--preto)', fontWeight: '600' }}>
+                      {order.clienteNome}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--cinza-medio)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                      <MapPin size={12} /> {order.clienteCidade} - {order.clienteEndereco}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', paddingTop: '8px', borderTop: '1px solid var(--cinza-claro)' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--cinza-medio)' }}>
+                        Emissão: {new Date(order.data).toLocaleDateString('pt-BR')}
+                      </span>
+                      <span style={{ fontWeight: '700', fontSize: '0.9rem', color: 'var(--azul-secundario)' }}>
+                        Total: R$ {order.total.toFixed(2)}
+                      </span>
+                    </div>
                   </div>
-                  <div style={{ fontSize: '0.9rem', color: 'var(--preto)', fontWeight: '600' }}>
-                    {order.clienteNome}
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--cinza-medio)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
-                    <MapPin size={12} /> {order.clienteCidade} - {order.clienteEndereco}
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', paddingTop: '8px', borderTop: '1px solid var(--cinza-claro)' }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--cinza-medio)' }}>
-                      Emissão: {new Date(order.data).toLocaleDateString('pt-BR')}
-                    </span>
-                    <span style={{ fontWeight: '700', fontSize: '0.9rem', color: 'var(--azul-secundario)' }}>
-                      Total: R$ {order.total.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="card" style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--cinza-medio)' }}>
+                <Truck size={40} style={{ margin: '0 auto 12px auto', color: 'var(--cinza-claro)' }} />
+                <h3 style={{ fontSize: '1.1rem', color: 'var(--cinza-medio)', marginBottom: '4px' }}>Nenhuma entrega pendente</h3>
+                <p style={{ fontSize: '0.85rem' }}>Todos os pedidos emitidos já foram entregues ou cancelados.</p>
+              </div>
+            )
           ) : (
-            <div className="card" style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--cinza-medio)' }}>
-              <Truck size={40} style={{ margin: '0 auto 12px auto', color: 'var(--cinza-claro)' }} />
-              <h3 style={{ fontSize: '1.1rem', color: 'var(--cinza-medio)', marginBottom: '4px' }}>Nenhuma entrega pendente</h3>
-              <p style={{ fontSize: '0.85rem' }}>Todos os pedidos emitidos já foram entregues ou cancelados.</p>
-            </div>
+            /* HISTÓRICO DE ENTREGUES */
+            deliveredOrders.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {deliveredOrders.map(order => (
+                  <div 
+                    key={order.id} 
+                    className="card" 
+                    onClick={() => setViewingPastDelivery(order)}
+                    style={{ cursor: 'pointer', borderLeft: '5px solid var(--verde-escuro)', padding: '16px' }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <span style={{ fontWeight: '800', color: 'var(--azul-principal)' }}>{order.numero}</span>
+                      <span className="badge" style={{ backgroundColor: 'rgba(90, 158, 26, 0.1)', color: 'var(--verde-escuro)', border: '1px solid rgba(90, 158, 26, 0.2)' }}>Entregue</span>
+                    </div>
+                    <div style={{ fontSize: '0.9rem', color: 'var(--preto)', fontWeight: '600' }}>
+                      {order.clienteNome}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--cinza-medio)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                      <MapPin size={12} /> {order.clienteCidade} - {order.clienteEndereco}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', paddingTop: '8px', borderTop: '1px solid var(--cinza-claro)' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--cinza-medio)' }}>
+                        Status: Concluído
+                      </span>
+                      <span style={{ fontWeight: '700', fontSize: '0.9rem', color: 'var(--verde-escuro)' }}>
+                        Total: R$ {order.total.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="card" style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--cinza-medio)' }}>
+                <History size={40} style={{ margin: '0 auto 12px auto', color: 'var(--cinza-claro)' }} />
+                <h3 style={{ fontSize: '1.1rem', color: 'var(--cinza-medio)', marginBottom: '4px' }}>Nenhum histórico encontrado</h3>
+                <p style={{ fontSize: '0.85rem' }}>Nenhum pedido foi marcado como entregue ainda.</p>
+              </div>
+            )
           )}
         </div>
       )}

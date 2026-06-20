@@ -440,3 +440,417 @@ export function printOrderPDF(pedidoId) {
     // printWindow.close();
   };
 }
+
+export function printDeliveryPDF(pedidoId) {
+  const db = getDb();
+  
+  // Buscar dados do pedido
+  const ped = db.pedidos.find(p => p.id === Number(pedidoId));
+  if (!ped) {
+    alert('Pedido não encontrado para impressão.');
+    return;
+  }
+  
+  const client = db.clientes.find(c => c.id === ped.cliente_id) || {};
+  const seller = db.usuarios.find(u => u.id === ped.vendedor_id) || {};
+  const items = db.itens_pedido.filter(i => i.pedido_id === ped.id);
+  const signature = db.assinaturas.find(a => a.pedido_id === ped.id);
+  const location = db.localizacoes.find(l => l.pedido_id === ped.id && l.tipo === 'venda');
+  const deliveryLocation = db.localizacoes.find(l => l.pedido_id === ped.id && l.tipo === 'entrega');
+  const deliveryPhoto = db.fotos_entrega.find(f => f.pedido_id === ped.id);
+
+  const resolvedItems = items.map(it => {
+    const prod = db.produtos.find(p => p.id === it.produto_id) || {};
+    return {
+      ...it,
+      nome: prod.nome,
+      codigo: prod.codigo,
+      unidade: prod.unidade
+    };
+  });
+
+  const formattedSaleDate = new Date(ped.data).toLocaleString('pt-BR');
+  const formattedDeliveryDate = deliveryLocation ? new Date(deliveryLocation.data_hora).toLocaleString('pt-BR') : 'N/A';
+  const empresa = db.empresas?.[0] || { nome: 'Forte Gado', logotipo: '🐂' };
+  
+  const printContent = `
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+      <meta charset="UTF-8">
+      <title>Comprovante de Entrega - Pedido ${ped.numero}</title>
+      <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        
+        body {
+          font-family: 'Inter', sans-serif;
+          color: #1A1A1A;
+          margin: 0;
+          padding: 20px;
+          line-height: 1.4;
+          font-size: 11px;
+          background-color: #ffffff;
+        }
+
+        .container {
+          max-width: 800px;
+          margin: 0 auto;
+          border: 1px solid #E2E8F0;
+          padding: 30px;
+          border-radius: 8px;
+        }
+
+        .pdf-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          border-bottom: 3px solid #5A9E1A; /* Verde para entregas */
+          padding-bottom: 15px;
+          margin-bottom: 20px;
+        }
+
+        .logo-box {
+          font-size: 26px;
+          font-weight: 800;
+          color: #0A2E73;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .logo-badge {
+          background-color: #5A9E1A;
+          color: white;
+          padding: 4px 10px;
+          border-radius: 4px;
+          font-size: 20px;
+        }
+
+        .title-box {
+          text-align: right;
+        }
+
+        .title-box h1 {
+          margin: 0;
+          color: #5A9E1A;
+          font-size: 18px;
+          font-weight: 700;
+          text-transform: uppercase;
+        }
+
+        .title-box p {
+          margin: 5px 0 0 0;
+          font-size: 11px;
+          color: #718096;
+        }
+
+        .info-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 20px;
+          margin-bottom: 20px;
+        }
+
+        .info-card {
+          background-color: #F8FAFC;
+          border: 1px solid #E2E8F0;
+          padding: 12px;
+          border-radius: 6px;
+        }
+
+        .info-card h3 {
+          margin-top: 0;
+          margin-bottom: 8px;
+          color: #0A2E73;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          border-bottom: 1px solid #cbd5e0;
+          padding-bottom: 4px;
+        }
+
+        .info-card p {
+          margin: 3px 0;
+        }
+
+        .product-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 20px;
+        }
+
+        .product-table th, .product-table td {
+          padding: 8px 10px;
+          text-align: left;
+          border-bottom: 1px solid #E2E8F0;
+        }
+
+        .product-table th {
+          background-color: #0A2E73;
+          color: #ffffff;
+          font-weight: 600;
+          font-size: 10px;
+          text-transform: uppercase;
+        }
+
+        .product-table tr:nth-child(even) td {
+          background-color: #F8FAFC;
+        }
+
+        .text-right {
+          text-align: right;
+        }
+
+        .delivery-proof-section {
+          margin-top: 20px;
+          border-top: 1px solid #E2E8F0;
+          padding-top: 20px;
+        }
+
+        .delivery-proof-title {
+          font-size: 12px;
+          font-weight: 700;
+          color: #0A2E73;
+          margin-bottom: 12px;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .proof-grid {
+          display: grid;
+          grid-template-columns: 1.2fr 0.8fr;
+          gap: 20px;
+        }
+
+        .photo-card {
+          border: 1px solid #E2E8F0;
+          border-radius: 8px;
+          padding: 10px;
+          background-color: #FCFDFE;
+          text-align: center;
+        }
+
+        .photo-card img {
+          max-width: 100%;
+          max-height: 280px;
+          border-radius: 6px;
+          object-fit: contain;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+          border: 1px solid #E2E8F0;
+        }
+
+        .photo-card-placeholder {
+          height: 180px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #A0AEC0;
+          background-color: #F8FAFC;
+          border: 1px dashed #CBD5E0;
+          border-radius: 6px;
+        }
+
+        .sidebar-column {
+          display: flex;
+          flex-direction: column;
+          gap: 15px;
+        }
+
+        .signature-card {
+          border: 1px solid #E2E8F0;
+          border-radius: 8px;
+          padding: 10px;
+          background-color: #FCFDFE;
+          text-align: center;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          align-items: center;
+          height: 110px;
+        }
+
+        .signature-card img {
+          max-height: 60px;
+          max-width: 90%;
+        }
+
+        .signature-line {
+          width: 80%;
+          border-top: 1px solid #A0AEC0;
+          margin-top: 5px;
+          padding-top: 3px;
+          font-size: 9px;
+          color: #718096;
+        }
+
+        .gps-card {
+          background-color: #F8FAFC;
+          border: 1px solid #E2E8F0;
+          border-radius: 8px;
+          padding: 12px;
+        }
+
+        .gps-card h4 {
+          margin-top: 0;
+          margin-bottom: 6px;
+          color: #0A2E73;
+          font-size: 10px;
+          text-transform: uppercase;
+        }
+
+        .gps-card p {
+          margin: 3px 0;
+          color: #4A5568;
+        }
+
+        .footer-institucional {
+          margin-top: 30px;
+          text-align: center;
+          font-size: 9px;
+          color: #A0AEC0;
+          border-top: 1px solid #E2E8F0;
+          padding-top: 15px;
+        }
+
+        @media print {
+          body {
+            padding: 0;
+          }
+          .container {
+            border: none;
+            padding: 0;
+          }
+          button {
+            display: none;
+          }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        
+        <!-- Header -->
+        <div class="pdf-header">
+          <div class="logo-box">
+            ${empresa.logotipo && empresa.logotipo.startsWith('data:') ? (
+              `<img src="${empresa.logotipo}" alt="Logo" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;" />`
+            ) : (
+              `<span class="logo-badge">${empresa.logotipo || '🐂'}</span>`
+            )}
+            ${empresa.nome || 'Forte Gado'}
+          </div>
+          <div class="title-box">
+            <h1>Comprovante de Entrega</h1>
+            <p>Pedido: <strong>${ped.numero}</strong> | Status: <strong>${ped.status}</strong></p>
+          </div>
+        </div>
+
+        <!-- Info Grid -->
+        <div class="info-grid">
+          <div class="info-card">
+            <h3>Dados do Cliente</h3>
+            <p><strong>Nome/Razão Social:</strong> ${client.nome || 'Não cadastrado'}</p>
+            <p><strong>CPF/CNPJ:</strong> ${client.cpf_cnpj || 'Não cadastrado'}</p>
+            <p><strong>Endereço:</strong> ${client.endereco || 'Não cadastrado'}</p>
+            <p><strong>Cidade:</strong> ${client.cidade || 'Não cadastrado'}</p>
+            <p><strong>Telefone:</strong> ${client.telefone || 'Não cadastrado'}</p>
+          </div>
+          <div class="info-card">
+            <h3>Metadados da Entrega</h3>
+            <p><strong>Vendedor Emissor:</strong> ${seller.nome || 'Vendedor'}</p>
+            <p><strong>Data de Emissão (Venda):</strong> ${formattedSaleDate}</p>
+            <p><strong>Data de Confirmação (Entrega):</strong> ${formattedDeliveryDate}</p>
+            <p><strong>Valor Total do Pedido:</strong> R$ ${ped.total.toFixed(2)}</p>
+          </div>
+        </div>
+
+        <!-- Tabela de Itens Entregues -->
+        <table class="product-table">
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Produto</th>
+              <th>Unidade</th>
+              <th class="text-right">Qtd Entregue</th>
+              <th class="text-right">Unitário</th>
+              <th class="text-right">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${resolvedItems.map(it => `
+              <tr>
+                <td>${it.codigo}</td>
+                <td>${it.nome}</td>
+                <td>${it.unidade}</td>
+                <td class="text-right">${it.quantidade}</td>
+                <td class="text-right">R$ ${it.valor_unitario.toFixed(2)}</td>
+                <td class="text-right">R$ ${((it.quantidade * it.valor_unitario) - (it.desconto || 0)).toFixed(2)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <!-- Seção de Comprovação Física da Entrega -->
+        <div class="delivery-proof-section">
+          <div class="delivery-proof-title">Comprovação e Segurança da Entrega</div>
+          
+          <div class="proof-grid">
+            <!-- Foto da Entrega -->
+            <div class="photo-card">
+              <div style="font-weight: 600; font-size: 10px; color: #4A5568; margin-bottom: 8px; text-transform: uppercase;">Foto de Comprovação da Carga / Local</div>
+              ${deliveryPhoto && deliveryPhoto.imagem ? (
+                `<img src="${deliveryPhoto.imagem}" alt="Foto Comprovante Entrega" />`
+              ) : (
+                `<div class="photo-card-placeholder">Nenhuma foto registrada para esta entrega</div>`
+              )}
+            </div>
+            
+            <!-- Assinatura e Coordenadas GPS -->
+            <div class="sidebar-column">
+              <!-- Assinatura da Venda -->
+              <div class="signature-card">
+                <div style="font-weight: 600; font-size: 9px; color: #4A5568; text-transform: uppercase;">Assinatura do Cliente</div>
+                ${signature ? `<img src="${signature.imagem}" alt="Assinatura" />` : '<div style="height: 40px; color: #A0AEC0; font-size: 10px; display:flex; align-items:center;">Nenhuma assinatura registrada</div>'}
+                <div class="signature-line">Assinado Digitalmente no Pedido</div>
+              </div>
+              
+              <!-- Geolocalização -->
+              <div class="gps-card">
+                <h4>Geolocalização (GPS)</h4>
+                <p><strong>Latitude:</strong> ${deliveryLocation ? deliveryLocation.latitude.toFixed(6) : 'N/A'}</p>
+                <p><strong>Longitude:</strong> ${deliveryLocation ? deliveryLocation.longitude.toFixed(6) : 'N/A'}</p>
+                ${deliveryLocation ? `
+                  <p style="margin-top: 6px; font-size: 9px;">
+                    <span style="color: #0A2E73; font-weight: 600;">Data/Hora GPS:</span><br/>
+                    ${new Date(deliveryLocation.data_hora).toLocaleString('pt-BR')}
+                  </p>
+                ` : ''}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rodapé -->
+        <div class="footer-institucional">
+          ${empresa.nome || 'Forte Gado Comercial Ltda'} – Relatório Oficial de Baixa de Carga e Comprovação de Entrega.<br>
+          Este documento atesta a entrega física dos produtos descritos acima no endereço indicado pelo cliente.
+        </div>
+
+      </div>
+    </body>
+    </html>
+  `;
+
+  // Abrir uma janela temporária para imprimir
+  const printWindow = window.open('', '_blank', 'width=850,height=600');
+  printWindow.document.open();
+  printWindow.document.write(printContent);
+  printWindow.document.close();
+  
+  // Esperar carregar as fontes e imagens e chamar o print
+  printWindow.onload = function() {
+    printWindow.focus();
+    printWindow.print();
+  };
+}
+
