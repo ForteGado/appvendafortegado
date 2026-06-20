@@ -289,9 +289,15 @@ export default function Financial() {
             ${empresa.nome || 'Forte Gado'} © 2026 - Relatório de conferência de vendas e liberação de comissão por recebimento.
           </div>
           <script>
-            window.onload = function() {
+            function startPrint() {
+              window.focus();
               window.print();
               setTimeout(function() { window.close(); }, 500);
+            }
+            if (document.readyState === 'complete') {
+              startPrint();
+            } else {
+              window.addEventListener('load', startPrint);
             }
           </script>
         </body>

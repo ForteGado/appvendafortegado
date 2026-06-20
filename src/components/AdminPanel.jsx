@@ -570,9 +570,15 @@ function UsuariosTab({ currentUser }) {
             ${empresa.nome || 'Forte Gado'} © 2026 - Relatório gerencial de controle diário de vendas por vendedor.
           </div>
           <script>
-            window.onload = function() {
+            function startPrint() {
+              window.focus();
               window.print();
               setTimeout(function() { window.close(); }, 500);
+            }
+            if (document.readyState === 'complete') {
+              startPrint();
+            } else {
+              window.addEventListener('load', startPrint);
             }
           </script>
         </body>
