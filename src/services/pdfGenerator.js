@@ -1,7 +1,11 @@
 // Gerador de PDF do Pedido utilizando a API de impressão do navegador (Offline-ready)
 import { getDb } from './db';
+import { fetchSignatureIfNeeded, fetchDeliveryPhotoIfNeeded } from './supabaseService';
 
-export function printOrderPDF(pedidoId) {
+export async function printOrderPDF(pedidoId) {
+  // Garantir carregamento da assinatura se necessário (busca sob demanda no Supabase)
+  await fetchSignatureIfNeeded(pedidoId);
+  
   const db = getDb();
   
   // Buscar dados
@@ -441,7 +445,11 @@ export function printOrderPDF(pedidoId) {
   };
 }
 
-export function printDeliveryPDF(pedidoId) {
+export async function printDeliveryPDF(pedidoId) {
+  // Garantir carregamento da assinatura e foto de entrega se necessário (busca sob demanda no Supabase)
+  await fetchSignatureIfNeeded(pedidoId);
+  await fetchDeliveryPhotoIfNeeded(pedidoId);
+  
   const db = getDb();
   
   // Buscar dados do pedido

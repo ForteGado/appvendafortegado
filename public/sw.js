@@ -42,27 +42,56 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const requestUrl = event.request.url;
 
-  // Não cachear chamadas de API externas (Supabase, Google Sheets)
+  // Não interceptar requisições que não sejam GET ou que sejam para APIs externas
   if (
+    event.request.method !== 'GET' ||
+    !requestUrl.startsWith(self.location.origin) ||
     requestUrl.includes('supabase.co') || 
     requestUrl.includes('supabase.com') ||
-    requestUrl.includes('googleapis.com') ||
-    event.request.method !== 'GET'
+    requestUrl.includes('googleapis.com')
   ) {
     return;
   }
 
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request).catch(() => {
-        // Se falhar a rede (offline) e for navegação de página, retorna index.html
-        if (event.request.mode === 'navigate') {
-          return caches.match('/index.html');
+  const isHashedAsset = requestUrl.includes('/assets/');
+
+  if (isHashedAsset) {
+    // Cache-First (arquivos compilados pelo Vite contêm hash no nome e nunca mudam)
+    event.respondWith(
+      caches.match(event.request).then((cachedResponse) => {
+        if (cachedResponse) {
+          return cachedResponse;
         }
-      });
-    })
-  );
+        return fetch(event.request).then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            return caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, networkResponse.clone());
+              return networkResponse;
+            });
+          }
+          return networkResponse;
+        });
+      })
+    );
+  } else {
+    // Stale-While-Revalidate para outros recursos locais (index.html, manifest, icons, etc.)
+    event.respondWith(
+      caches.open(CACHE_NAME).then((cache) => {
+        return cache.match(event.request).then((cachedResponse) => {
+          const fetchPromise = fetch(event.request).then((networkResponse) => {
+            if (networkResponse && networkResponse.status === 200) {
+              cache.put(event.request, networkResponse.clone());
+            }
+            return networkResponse;
+          }).catch(() => {
+            // Se falhar a rede (offline) e for navegação de página, retorna index.html
+            if (event.request.mode === 'navigate') {
+              return cache.match('/index.html');
+            }
+          });
+          return cachedResponse || fetchPromise;
+        });
+      })
+    );
+  }
 });

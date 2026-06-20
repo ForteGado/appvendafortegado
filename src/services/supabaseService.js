@@ -611,7 +611,7 @@ export async function downloadDataFromSupabase() {
   const creds = getCredentials();
   if (creds.simulateOffline) return { success: false, reason: 'Modo Offline Ativado' };
 
-  console.log('[Supabase Download] Iniciando download de dados do Supabase...');
+  console.log('[Supabase Download] Iniciando download de dados do Supabase (excluindo assinaturas e fotos para otimizar startup)...');
 
   try {
     const { data: empresas, error: errEmp } = await client.from('empresas').select('*');
@@ -638,12 +638,6 @@ export async function downloadDataFromSupabase() {
     const { data: parcelas, error: errPar } = await client.from('parcelas').select('*');
     if (errPar) throw errPar;
     
-    const { data: assinaturas, error: errAss } = await client.from('assinaturas').select('*');
-    if (errAss) throw errAss;
-    
-    const { data: fotos_entrega, error: errFoto } = await client.from('fotos_entrega').select('*');
-    if (errFoto) throw errFoto;
-    
     const { data: localizacoes, error: errLoc } = await client.from('localizacoes').select('*');
     if (errLoc) throw errLoc;
 
@@ -660,8 +654,6 @@ export async function downloadDataFromSupabase() {
     if (Array.isArray(pedidos)) db.pedidos = pedidos; // Sempre substitui (pode estar vazio no Supabase)
     if (Array.isArray(itens_pedido)) db.itens_pedido = itens_pedido;
     if (Array.isArray(parcelas)) db.parcelas = parcelas;
-    if (Array.isArray(assinaturas)) db.assinaturas = assinaturas;
-    if (Array.isArray(fotos_entrega)) db.fotos_entrega = fotos_entrega;
     if (Array.isArray(localizacoes)) db.localizacoes = localizacoes;
 
     console.log(`[Supabase Download] Sincronizado: ${empresas?.length || 0} empresas, ${usuarios?.length || 0} usuários, ${pedidos?.length || 0} pedidos, ${clientes?.length || 0} clientes.`);
@@ -799,5 +791,75 @@ export async function saveClientToSupabase(clientData) {
     return { success: false, reason: error.message };
   }
   return { success: true };
+}
+
+/**
+ * Busca a assinatura de um pedido específico no Supabase se ela não estiver no db local.
+ */
+export async function fetchSignatureIfNeeded(pedidoId) {
+  const db = getDb();
+  // Se já existe no db local, retorna
+  const existing = db.assinaturas.find(a => a.pedido_id === Number(pedidoId));
+  if (existing) return existing;
+
+  const client = getSupabaseClient();
+  if (!client) return null;
+
+  const creds = getCredentials();
+  if (creds.simulateOffline) return null;
+
+  try {
+    console.log(`[Supabase] Buscando assinatura do pedido ${pedidoId} sob demanda...`);
+    const { data, error } = await client
+      .from('assinaturas')
+      .select('*')
+      .eq('pedido_id', Number(pedidoId))
+      .maybeSingle();
+
+    if (error) throw error;
+    if (data) {
+      db.assinaturas.push(data);
+      saveDb(db);
+      return data;
+    }
+  } catch (e) {
+    console.warn(`[Supabase] Erro ao carregar assinatura sob demanda:`, e);
+  }
+  return null;
+}
+
+/**
+ * Busca a foto de entrega de um pedido específico no Supabase se ela não estiver no db local.
+ */
+export async function fetchDeliveryPhotoIfNeeded(pedidoId) {
+  const db = getDb();
+  // Se já existe no db local, retorna
+  const existing = db.fotos_entrega.find(f => f.pedido_id === Number(pedidoId));
+  if (existing) return existing;
+
+  const client = getSupabaseClient();
+  if (!client) return null;
+
+  const creds = getCredentials();
+  if (creds.simulateOffline) return null;
+
+  try {
+    console.log(`[Supabase] Buscando foto de entrega do pedido ${pedidoId} sob demanda...`);
+    const { data, error } = await client
+      .from('fotos_entrega')
+      .select('*')
+      .eq('pedido_id', Number(pedidoId))
+      .maybeSingle();
+
+    if (error) throw error;
+    if (data) {
+      db.fotos_entrega.push(data);
+      saveDb(db);
+      return data;
+    }
+  } catch (e) {
+    console.warn(`[Supabase] Erro ao carregar foto de entrega sob demanda:`, e);
+  }
+  return null;
 }
 

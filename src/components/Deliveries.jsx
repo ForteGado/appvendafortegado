@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Truck, MapPin, Camera, AlertTriangle, CheckCircle, Navigation, Trash2, RefreshCw, FileText, History } from 'lucide-react';
 import { getDb, getCredentials, confirmDeliveryLocal, cancelOrderLocal } from '../services/db';
 import { printDeliveryPDF } from '../services/pdfGenerator';
+import { fetchSignatureIfNeeded, fetchDeliveryPhotoIfNeeded } from '../services/supabaseService';
 import CameraCapture from './CameraCapture';
 
 export default function Deliveries() {
@@ -11,6 +12,7 @@ export default function Deliveries() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [lastConfirmedOrder, setLastConfirmedOrder] = useState(null);
   const [viewingPastDelivery, setViewingPastDelivery] = useState(null);
+  const [loadingPhoto, setLoadingPhoto] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   
@@ -242,7 +244,10 @@ export default function Deliveries() {
                 <button 
                   type="button" 
                   className="btn btn-secondary" 
-                  onClick={() => setViewingPastDelivery(null)}
+                  onClick={() => {
+                    setViewingPastDelivery(null);
+                    setLoadingPhoto(false);
+                  }}
                   style={{ width: 'auto', padding: '6px 12px', fontSize: '0.75rem' }}
                 >
                   Voltar
@@ -296,8 +301,12 @@ export default function Deliveries() {
                   <div style={{ borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--cinza-claro)', textAlign: 'center', padding: '8px', backgroundColor: '#F8FAFC' }}>
                     <img src={details.photo} style={{ maxWidth: '100%', maxHeight: '240px', objectFit: 'contain', borderRadius: '6px' }} alt="Foto comprovante de entrega" />
                   </div>
+                ) : loadingPhoto ? (
+                  <p style={{ fontSize: '0.8rem', color: 'var(--cinza-medio)', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <RefreshCw size={14} className="spin-anim" /> Carregando foto do servidor...
+                  </p>
                 ) : (
-                  <p style={{ fontSize: '0.8rem', color: 'var(--cinza-medio)', fontStyle: 'italic' }}>Nenhuma foto comprovante capturada.</p>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--cinza-medio)', fontStyle: 'italic' }}>Nenhuma foto comprovante encontrada.</p>
                 )}
               </div>
 
@@ -520,7 +529,16 @@ export default function Deliveries() {
                   <div 
                     key={order.id} 
                     className="card" 
-                    onClick={() => setViewingPastDelivery(order)}
+                    onClick={async () => {
+                      setViewingPastDelivery(order);
+                      setLoadingPhoto(true);
+                      try {
+                        await fetchDeliveryPhotoIfNeeded(order.id);
+                        await fetchSignatureIfNeeded(order.id);
+                      } finally {
+                        setLoadingPhoto(false);
+                      }
+                    }}
                     style={{ cursor: 'pointer', borderLeft: '5px solid var(--verde-escuro)', padding: '16px' }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>

@@ -181,8 +181,43 @@ export function getDb() {
   return db;
 }
 
+// Função para limpar assinaturas e fotos antigas e evitar estourar o limite de 5MB do localStorage
+function pruneLargeAssets(db) {
+  // Coletar IDs de assinaturas e fotos que estão na fila de sincronização pendente
+  const pendingAssIds = new Set();
+  const pendingFotoIds = new Set();
+  try {
+    const queue = JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY) || '[]');
+    queue.forEach(item => {
+      if (item.payload) {
+        if (item.payload.assinatura && item.payload.assinatura.id) {
+          pendingAssIds.add(item.payload.assinatura.id);
+        }
+        if (item.payload.foto && item.payload.foto.id) {
+          pendingFotoIds.add(item.payload.foto.id);
+        }
+      }
+    });
+  } catch (e) {
+    console.error('Erro ao ler fila para pruning:', e);
+  }
+
+  // Prunar assinaturas (manter as 15 mais recentes ou pendentes de sincronização)
+  if (db.assinaturas && db.assinaturas.length > 15) {
+    db.assinaturas.sort((a, b) => b.id - a.id);
+    db.assinaturas = db.assinaturas.filter((a, index) => index < 15 || pendingAssIds.has(a.id));
+  }
+
+  // Prunar fotos de entrega (manter as 15 mais recentes ou pendentes de sincronização)
+  if (db.fotos_entrega && db.fotos_entrega.length > 15) {
+    db.fotos_entrega.sort((a, b) => b.id - a.id);
+    db.fotos_entrega = db.fotos_entrega.filter((f, index) => index < 15 || pendingFotoIds.has(f.id));
+  }
+}
+
 // Salvar alterações
 export function saveDb(data) {
+  pruneLargeAssets(data);
   localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
   // Notificar o app sobre a mudança (para atualizar telas em tempo real se necessário)
   window.dispatchEvent(new Event('fortegado_db_update'));
